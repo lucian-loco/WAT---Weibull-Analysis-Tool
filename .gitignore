@@ -1,0 +1,4 @@
+env.sh
+venv
+.venv
+__pycache__
