@@ -28,17 +28,17 @@ def get_weibull_data(part):
     suspensions = []
 
     # columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS
-    sql_query = "SELECT RUNNING_TIME, STATUS FROM Weibull_data WHERE PART = '{0}'".format(part)
-    cursor = get_db_cursor()
-    result = cursor.execute(sql_query)
+    with get_db_cursor() as cursor:
+        sql_query = "SELECT RUNNING_TIME, STATUS FROM Weibull_data WHERE PART = :part_id"
+        result = cursor.execute(sql_query, (part,))
 
-    for row in result:
-        if row[1] == 'S':
-            suspensions.append(int(row[0]))
-        elif row[1] == 'F':
-            failures.append(int(row[0]))
-        else:
-            raise RuntimeError('Unknown status "{0}"'.format(row[1]))
+        for row in result:
+            if row[1] == 'S':
+                suspensions.append(int(row[0]))
+            elif row[1] == 'F':
+                failures.append(int(row[0]))
+            else:
+                raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
 
     if not failures and not suspensions:
