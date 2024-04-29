@@ -70,6 +70,7 @@ def graph():
     x = Analysis(df=data['failures'], ds=data['suspensions'],
             show=False, save=True,
             fig_size=(10, 5),    # (8, 6) -> 800x600
+            unit='days',
             plot_title='Weibull Probability Plot for {0}'.format(part),
             path=buffer)
     x.mrr()
