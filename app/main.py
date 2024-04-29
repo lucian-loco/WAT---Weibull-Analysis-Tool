@@ -69,7 +69,7 @@ def graph():
     # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
     x = Analysis(df=data['failures'], ds=data['suspensions'],
             show=False, save=True,
-            fig_size=(8, 6),    # (8, 6) -> 800x600
+            fig_size=(9.5, 6),    # (8, 6) -> 800x600
             unit='days',
             plot_title='Weibull Probability Plot for {0}'.format(part),
             path=buffer)
