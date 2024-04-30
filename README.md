@@ -18,3 +18,32 @@ Parameters:
 * part - equipment code for the part to be analyzed (e.g. HCCTRI)
 
 Returns an image presenting a Weibull probability plot for the requested part.
+
+## Development
+
+This project is currently deployed in the [CERN OpenShift](https://paas.cern.ch) instance (`hit-data` project) and can be accessed via https://hit-data.app.cern.ch.
+Each time there is a new commit pushed to the master branch, the project will be automatically rebuilt and redeployed (with certain delay, up to 30 minutes).
+Changes to both Python scripts and Dockerfile will be taken into account.
+
+### Environment variables
+
+This script uses database queries to fetch data. In order to connect to the database you need to set the following environment variables:
+* DB_USER: user
+* DB_PASS: password
+* DB_HOST: connection address
+* DB_PORT: connection port
+* DB_SERV: service name
+
+### Python script
+
+* Create a new virtual environment (`python3 -m venv venv`)
+* Activate the environment (`source venv/bin/activate`)
+* Install dependencies (`pip3 install -r requirements.txt`)
+* Modify the code
+* Start the server (`python3 app/main.py` or `./gunicorn_start.sh`)
+* Navigate to http://localhost:8888/*endpoint* to test the changes.
+
+### Dockerfile
+
+* Modify Dockerfile
+* Rebuild and run the image (`docker_start.sh`)
