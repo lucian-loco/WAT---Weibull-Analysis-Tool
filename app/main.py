@@ -41,8 +41,8 @@ def get_weibull_data(part):
                 raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
 
-    if not failures and not suspensions:
-        raise RuntimeError('No data for "{0}"'.format(part))
+    if not failures or not suspensions:
+        raise RuntimeError('No failure/suspension data for "{0}"'.format(part))
 
     return {'failures': failures, 'suspensions': suspensions}
 
@@ -59,7 +59,7 @@ def graph():
     try:
         data = get_weibull_data(part)
     except RuntimeError as e:
-        return str(e), 400
+        return 'Weibull plot cannot be generated: ' + str(e), 400
 
 
     # Prepare the response
