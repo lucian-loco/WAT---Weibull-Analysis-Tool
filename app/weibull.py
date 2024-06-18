@@ -20,9 +20,8 @@ def get_data(part):
             else:
                 raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
-
-    if not failures or not suspensions:
-        raise RuntimeError('No failure/suspension data for "{0}"'.format(part))
+    if len(failures) < 2:
+        raise RuntimeError('Not enough failure data for "{0}"'.format(part))
 
     return {'failures': failures, 'suspensions': suspensions}
 
