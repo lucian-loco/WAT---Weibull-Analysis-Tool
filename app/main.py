@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import weibull
 import crate
-from flask import Flask, send_file, request
+from flask import Flask, send_file, render_template, request
 
 app = Flask(__name__)
 
@@ -17,8 +17,21 @@ def route_weibull():
     return send_file(graph, mimetype='image/png')
 
 
-@app.route('/crate', methods=['GET'])
-def route_crate():
+
+@app.route('/crate/edit', methods=['GET'])
+def route_crate_edit():
+    try:
+        crate_name = request.args.get('name')
+        graph = crate.generate_graph(crate_name)
+    except RuntimeError as e:
+        return 'Crate layout cannot be generated: ' + str(e), 400
+
+    document = graph.getvalue().decode('utf-8')
+    return render_template('drawio.html', document_data=document)
+
+
+@app.route('/crate/get', methods=['GET'])
+def route_crate_get():
     try:
         crate_name = request.args.get('name')
         graph = crate.generate_graph(crate_name)
