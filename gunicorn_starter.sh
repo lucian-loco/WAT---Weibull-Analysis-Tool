@@ -1,6 +1,6 @@
 #!/bin/sh
 # TMP_DIR="$(mktemp -d)"
-TMP_DIR="/tmp/weibull-cache"
+TMP_DIR="/tmp/hit-data-cache"
 mkdir -p "$TMP_DIR"
 export XDG_CACHE_HOME="$TMP_DIR"
 export MPLCONFIGDIR="$TMP_DIR"
