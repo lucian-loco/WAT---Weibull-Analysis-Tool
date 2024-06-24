@@ -126,8 +126,11 @@ def generate_graph(crate):
 # Create the generator instance and load the templates once
 generator = drawio.Generator()
 
-for filepath in glob.glob(os.path.join('../drawio', "*.xml")):
-    generator.load_library(filepath)
+for filepath in glob.glob(os.path.join('../drawio', '*.xml')):
+    try:
+        generator.load_library(filepath)
+    except:
+        print(f'ERROR: Could not load library {filepath}')
 
 
 if __name__ == '__main__':
