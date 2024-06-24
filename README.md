@@ -34,6 +34,13 @@ This script uses database queries to fetch data. In order to connect to the data
 * DB_PORT: connection port
 * DB_SERV: service name
 
+There is also a script which fetches draw.io template libraries from EOS. To make it work, you will need an account with read access to 'hit' EOS project
+and pass the credentials using the following environmental variables:
+* EOS_USER: user
+* EOS_PASS: password
+
+When the project is running in an Openshift instance, you should use 'Secrets' mechanism to assign values to set the environmental variables.
+
 ### Python script
 
 * Create a new virtual environment (`python3 -m venv venv`)

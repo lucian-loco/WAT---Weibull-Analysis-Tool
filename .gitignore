@@ -1,4 +1,5 @@
 env.sh
 venv
 .venv
+drawio
 __pycache__
