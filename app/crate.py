@@ -48,7 +48,7 @@ class CrateLink:
 
 def get_ccde_crate(crate):
     s = requests.session()
-    request = s.get(f"{CCDA_API_URL}/crates/search?query=label%3D%3D{crate}", verify=False)
+    request = s.get(f'{CCDA_API_URL}/crates/search?query=label%3D%3D{crate}', verify=False)
     response = json.loads(request.text)
 
     if response['totalElements'] <= 0:
@@ -116,7 +116,7 @@ def generate_graph(crate):
 
         # Slot label
         generator.add_box(pos_x, pos_y + SLOT_HEIGHT, SLOT_WIDTH, 30,
-                text=f"Slot {slot_index}", style=slot_style)
+                text=f'Slot {slot_index}', style=slot_style)
 
     buffer = io.BytesIO(generator.as_string().encode('utf-8'))
     buffer.seek(0)
