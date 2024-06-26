@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 from predictr import Analysis
-import database
+import db_hitdata
 import io
 
 def get_data(part):
@@ -8,7 +8,7 @@ def get_data(part):
     suspensions = []
 
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS
-    with database.get_cursor() as cursor:
+    with db_hitdata.get_cursor() as cursor:
         sql_query = "SELECT RUNNING_TIME, STATUS FROM Weibull_data WHERE PART = :part_id"
         result = cursor.execute(sql_query, (part,))
 

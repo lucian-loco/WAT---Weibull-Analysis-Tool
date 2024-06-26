@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 from dataclasses import dataclass
-import json
-import requests
+import ccda
 import io
 import glob
 import os
@@ -9,8 +8,6 @@ import copy
 import drawio
 import shapelinks
 
-
-CCDA_API_URL='https://ccda.cern.ch:8900/api'
 
 @dataclass
 class Module:
@@ -47,17 +44,8 @@ class CrateLink:
 
 
 def get_ccde_crate(crate):
-    s = requests.session()
-    request = s.get(f'{CCDA_API_URL}/crates/search?query=label%3D%3D{crate}', verify=False)
-    response = json.loads(request.text)
+    crate_data = ccda.crate_by_label(crate)
 
-    if response['totalElements'] <= 0:
-        raise RuntimeError('Invalid crate name')
-
-    if response['totalElements'] > 1:
-        raise RuntimeError('Too many results')
-
-    crate_data = response['content'][0]
     crate = Crate(
             name         = crate_data['label'],
             typeName     = crate_data['typeName'],
