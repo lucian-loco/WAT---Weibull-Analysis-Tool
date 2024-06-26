@@ -47,7 +47,7 @@ When the project is running in an Openshift instance, you should use 'Secrets' m
 * Activate the environment (`source venv/bin/activate`)
 * Install dependencies (`pip3 install -r requirements.txt`)
 * Modify the code
-* Start the server (`python3 app/main.py` or `./gunicorn_start.sh`)
+* Start the server (`python3 src/main.py` or `./gunicorn_start.sh`)
 * Navigate to http://localhost:8888/*endpoint* to test the changes.
 
 ### Dockerfile
