@@ -10,9 +10,14 @@ def crate_by_label(label):
     data = json.loads(response.text)
 
     if data['totalElements'] <= 0:
-        raise RuntimeError('Invalid crate name')
+        raise RuntimeError('Invalid crate label')
 
     if data['totalElements'] > 1:
         raise RuntimeError('Too many results')
 
     return data['content'][0]
+
+
+def computer_by_name(name):
+    response = requests.get(f'{CCDA_API_URL}/computers/{name}', verify=False)
+    return json.loads(response.text)
