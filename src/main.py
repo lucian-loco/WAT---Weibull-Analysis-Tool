@@ -1,9 +1,19 @@
 #!/usr/bin/python3
 import weibull
 import crate
-from flask import Flask, send_file, render_template, request
+from flask import Flask, render_template, request, send_file
 
 app = Flask(__name__)
+
+
+@app.route('/')
+def route_main():
+    return render_template('index.html')
+
+
+@app.route('/favicon.ico')
+def favicon():
+   return app.send_static_file('favicon.ico')
 
 
 @app.route('/weibull', methods=['GET'])
