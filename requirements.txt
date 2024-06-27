@@ -4,3 +4,4 @@ gunicorn==22.0.0
 oracledb==2.1.2
 requests==2.32.3
 suds==1.1.2
+easysnmp==0.2.6
