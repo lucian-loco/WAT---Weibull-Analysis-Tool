@@ -98,8 +98,6 @@ class Device:
         return self.name < other.name
 
 
-
-
 class Connectivity:
     def __init__(self, all_connections=False):
         self._all_connections = all_connections
@@ -108,49 +106,10 @@ class Connectivity:
         self._ports = {}
         self._port_connections = {}
         self._fibers = []
-        self._incomplete_fibers = []
 
         # visjs data
         self.edges = []
         self.nodes = []
-
-
-    @staticmethod
-    def from_csv(filename, *args, **kwargs):
-        instance = Connectivity(*args, **kwargs)
-
-        with open(filename) as f:
-            reader = csv.DictReader(f)
-
-            for row in reader:
-                instance._process_row(row)
-
-            instance.process()
-
-        return instance
-
-
-    @staticmethod
-    def from_db(*args, **kwargs):
-        # Note that there are more column available in the view,
-        # but they are not used by the script
-        columns = ("PRIME_NAME", "PRIME_LABEL", "PRIME_PARENT_NAME",
-                "PRIME_PARENT_LABEL", "SECOND_NAME", "SECOND_LABEL",
-                "SECOND_PARENT_NAME", "SECOND_PARENT_LABEL")
-
-        cursor = db_hitdata.get_cursor()
-        sql_query = "SELECT {0} FROM controls_wr_fibres_v".format(", ".join(columns))
-        result = cursor.execute(sql_query)
-
-        instance = Connectivity()
-
-        for row in result:
-            # Build a dictionary with columns as the keys
-            row_annotated = {columns[i]: row[i] for i in range(len(columns))}
-            instance._process_row(row_annotated)
-
-        instance.process()
-        return instance
     
 
     @staticmethod
@@ -202,89 +161,10 @@ class Connectivity:
         return self._devices[self.get_peer_port(this_port).device]
 
 
-    def _add_complete_fiber(self, fiber):
+    def _add_fiber(self, fiber):
         self._fibers.append(fiber)
         self._port_connections[fiber.start] = fiber.end
         self._port_connections[fiber.end] = fiber.start
-
-
-    def _process_row(self, row):
-        if row["PRIME_NAME"] == row["SECOND_NAME"]:
-            logger.warning("Loop detected: {0}".format(row["PRIME_NAME"]))
-            return
-
-
-        # Process ports
-        for pfx in ("PRIME", "SECOND"):
-            device_name = row["{0}_PARENT_LABEL".format(pfx)]
-            port_name = row["{0}_NAME".format(pfx)]
-            port_label = row["{0}_LABEL".format(pfx)]
-
-            port = self.get_port(port_name)
-            port.label = port_label
-            port.device = device_name
-
-            if port.is_wrs_port:
-                try:
-                    device = self.get_device(device_name)
-
-                    if device.is_switch():
-                        # Normally label indicates the port number, but not always
-                        # (most nodes have a text description, so cannot be casted to int)
-                        # this cast helps with proper port sorting
-                        port.label = int(port_label)
-
-                    device.add_port(port)
-                except:
-                    logger.info("Skipping port '{0}' for device '{1}'".format(port_label, device_name))
-
-
-        # Process fiber connection
-        port1 = self.get_port(row["PRIME_NAME"])
-        port2 = self.get_port(row["SECOND_NAME"])
-        new_fiber = Fiber(port1, port2)
-
-        if new_fiber.is_complete:
-            # This fiber connects two switches directly, no more processing needed
-            self._add_complete_fiber(new_fiber)
-        else:
-            # It is a fiber between a switch and a patch panel or between two patch panels,
-            # so try to merge it with another fiber in order to make a connection between two switches
-            self._incomplete_fibers.append(new_fiber)
-            self._try_to_merge_fiber(new_fiber)
-
-
-    def _try_to_merge_fiber(self, fiber):
-        for f in self._incomplete_fibers:
-            if f == fiber:
-                continue    # do not try to merge a fiber to itself
-
-            if f.can_merge(fiber):
-                self._incomplete_fibers.remove(fiber)
-                self._incomplete_fibers.remove(f)
-                f.merge(fiber)
-
-                if f.is_complete:
-                    self._add_complete_fiber(f)
-                else:
-                    self._incomplete_fibers.append(f)
-
-                return True
-
-        return False
-
-
-    def _handle_incomplete_fibers(self):
-        merged_sth = True
-
-        while merged_sth:
-            merged_sth = False
-
-            for f in self._incomplete_fibers:
-                if self._try_to_merge_fiber(f):
-                    merged_sth = True
-                    # Restart the loop, _incomplete_fibers list has been modified
-                    break   
 
 
     def _assign_layers_full(self, top, layer=1):
@@ -372,7 +252,6 @@ class Connectivity:
 
     def process(self):
         assert(len(self.edges) == 0 and len(self.nodes) == 0)
-        self._handle_incomplete_fibers()
 
         grandmaster = self._devices[WR_GRANDMASTER]
 
@@ -425,6 +304,135 @@ class Connectivity:
                 if device.master:
                     master = self._devices[device.master]
                     self.edges.append({ "from": device.id, "to": master.id })   # TODO description?
+
+
+class ConnectivityDatabase(Connectivity):
+    """ Class generating connectivity information from a database/CSV file. """
+    def __init__(self, all_connections=False):
+        super(ConnectivityDatabase, self).__init__(all_connections)
+        self._incomplete_fibers = []
+
+
+    @staticmethod
+    def from_csv(filename, *args, **kwargs):
+        instance = ConnectivityDatabase(*args, **kwargs)
+
+        with open(filename) as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                instance._process_row(row)
+
+            instance.process()
+
+        return instance
+
+
+    @staticmethod
+    def from_db(*args, **kwargs):
+        # Note that there are more column available in the view,
+        # but they are not used by the script
+        columns = ("PRIME_NAME", "PRIME_LABEL", "PRIME_PARENT_NAME",
+                "PRIME_PARENT_LABEL", "SECOND_NAME", "SECOND_LABEL",
+                "SECOND_PARENT_NAME", "SECOND_PARENT_LABEL")
+
+        cursor = db_hitdata.get_cursor()
+        sql_query = "SELECT {0} FROM controls_wr_fibres_v".format(", ".join(columns))
+        result = cursor.execute(sql_query)
+
+        instance = ConnectivityDatabase()
+
+        for row in result:
+            # Build a dictionary with columns as the keys
+            row_annotated = {columns[i]: row[i] for i in range(len(columns))}
+            instance._process_row(row_annotated)
+
+        instance.process()
+        return instance
+
+
+    def _process_row(self, row):
+        if row["PRIME_NAME"] == row["SECOND_NAME"]:
+            logger.warning("Loop detected: {0}".format(row["PRIME_NAME"]))
+            return
+
+
+        # Process ports
+        for pfx in ("PRIME", "SECOND"):
+            device_name = row["{0}_PARENT_LABEL".format(pfx)]
+            port_name = row["{0}_NAME".format(pfx)]
+            port_label = row["{0}_LABEL".format(pfx)]
+
+            port = self.get_port(port_name)
+            port.label = port_label
+            port.device = device_name
+
+            if port.is_wrs_port:
+                try:
+                    device = self.get_device(device_name)
+
+                    if device.is_switch():
+                        # Normally label indicates the port number, but not always
+                        # (most nodes have a text description, so cannot be casted to int)
+                        # this cast helps with proper port sorting
+                        port.label = int(port_label)
+
+                    device.add_port(port)
+                except:
+                    logger.info("Skipping port '{0}' for device '{1}'".format(port_label, device_name))
+
+
+        # Process fiber connection
+        port1 = self.get_port(row["PRIME_NAME"])
+        port2 = self.get_port(row["SECOND_NAME"])
+        new_fiber = Fiber(port1, port2)
+
+        if new_fiber.is_complete:
+            # This fiber connects two switches directly, no more processing needed
+            self._add_fiber(new_fiber)
+        else:
+            # It is a fiber between a switch and a patch panel or between two patch panels,
+            # so try to merge it with another fiber in order to make a connection between two switches
+            self._incomplete_fibers.append(new_fiber)
+            self._try_to_merge_fiber(new_fiber)
+
+
+    def _try_to_merge_fiber(self, fiber):
+        for f in self._incomplete_fibers:
+            if f == fiber:
+                continue    # do not try to merge a fiber to itself
+
+            if f.can_merge(fiber):
+                self._incomplete_fibers.remove(fiber)
+                self._incomplete_fibers.remove(f)
+                f.merge(fiber)
+
+                if f.is_complete:
+                    self._add_fiber(f)
+                else:
+                    self._incomplete_fibers.append(f)
+
+                return True
+
+        return False
+
+
+    def _process_incomplete_fibers(self):
+        merged_sth = True
+
+        while merged_sth:
+            merged_sth = False
+
+            for f in self._incomplete_fibers:
+                if self._try_to_merge_fiber(f):
+                    merged_sth = True
+                    # Restart the loop, _incomplete_fibers list has been modified
+                    break
+
+
+    def process(self):
+        self._process_incomplete_fibers()
+        super(ConnectivityDatabase, self).process()
 
 
 if __name__ == "__main__":

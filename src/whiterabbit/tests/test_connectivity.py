@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import sys
 sys.path.append("..")
-from connectivity import Connectivity
+from connectivity import *
 
 # TODO turn it into a real pytest
 
-def test_incomplete_fibers(conn):
+def test_db_incomplete_fibers(conn):
     incomplete_nodes = set()
 
     # Verify that remaining incomplete fibers really cannot connect anything else
@@ -16,5 +16,5 @@ def test_incomplete_fibers(conn):
         incomplete_nodes.add(f.end)
 
 
-conn = Connectivity.from_csv("connections.csv", all_connections=True)
-test_incomplete_fibers(conn)
+conn_db = ConnectivityDatabase.from_csv("connections.csv", all_connections=True)
+test_db_incomplete_fibers(conn_db)
