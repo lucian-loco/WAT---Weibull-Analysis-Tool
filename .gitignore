@@ -1,5 +1,7 @@
 env.sh
 venv
 .venv
+.vscode
+.idea
 drawio
 __pycache__
