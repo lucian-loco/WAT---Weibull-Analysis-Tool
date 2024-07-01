@@ -89,5 +89,31 @@ def route_crate_get():
                      as_attachment=True, download_name=f'{crate_name}.drawio')
 
 
+@app.route('/whiterabbit')
+def route_wr_main():
+    return render_template('whiterabbit/main.html')
+
+
+@app.route('/whiterabbit/layout')
+def route_wr_layout():
+    return render_template('whiterabbit/layout.html')
+
+
+@app.route('/whiterabbit/switch', methods=['GET'])
+def route_wr_switch():
+    switch_name = request.args.get('name')
+    return render_template('whiterabbit/switch.html', switch_name=switch_name)
+
+
+@app.route('/whiterabbit/connections/layoutdb')
+def route_wr_connections_layout():
+    return send_file('whiterabbit/data/connectivity_layoutdb.json')
+
+
+@app.route('/whiterabbit/connections/snmp')
+def route_wr_connections_snmp():
+    return send_file('whiterabbit/data/connectivity_snmp.json')
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=8888, host='0.0.0.0', threaded=True)
