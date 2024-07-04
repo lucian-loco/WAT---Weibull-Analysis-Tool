@@ -7,117 +7,35 @@ import json
 import logging
 import argparse
 import db_hitdata
+import ccda
 import csv
 
-from fiber import Fiber
+from switch import Switch
+from devices import *
 
 logging.basicConfig(format='%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# TODO do not hardcode it here!
-WR_GRANDMASTER = "CTDW-CCR-CTNLJM1"
-
-
-def id_generator(start=1):
-    number = start
-    while True:
-        yield number
-        number += 1
-
-
-class Port:
-    SWITCH_PORT_PREFIX = "CTDNT"
-
-    def __init__(self, name, label=None, device=None, mac=None):
-        self.name = name                # as in LayoutDB, e.g. CTDNT.168.BC
-        self.label = label              # normally label is the port number, but not always
-        self.device = device            # parent WR device name
-        self.mac = mac.replace('-', ':').upper() if mac else None
-
-
-    @property
-    def is_wrs_port(self):
-        return self.name.upper().startswith(Port.SWITCH_PORT_PREFIX)
-
-
-    def __eq__(self, other):
-        return self.name == other.name and self.label == other.label and self.device == other.device
-
-
-    def __hash__(self):
-        return hash(self.name)
-
-
-    def __repr__(self):
-        if isinstance(self.label, int):
-            return "Port {0:02}/{1} ({2})".format(self.label, self.device, self.name)
-        else:
-            return "Port {0}/{1} ({2})".format(self.label, self.device, self.name)
-
-
-class Device:
-    SWITCH_NAME_PREFIX = "CTDW"
-
-    _id_gen = id_generator(1)
-
-    def __init__(self, name):
-        assert(name is not None)
-        self.name = name
-        self.master = None
-        self.id = None
-        self.layer = 0
-        self.ports = {}
-
-
-    def is_switch(self):
-        return self.name.upper().startswith(Device.SWITCH_NAME_PREFIX)
-
-
-    def add_port(self, port):
-        if port.name not in self.ports:
-            self.ports[port.name] = port
-        else:
-            assert(port == self.ports[port.name])
-
-
-    def sorted_ports(self):
-        return sorted(self.ports.values(), key=lambda x: x.label)
-
-
-    def assign_id(self):
-        assert(self.id is None)
-        self.id = next(Device._id_gen)
-
-
-    def __repr__(self):
-        return "Device {0}".format(self.name)
-
-
-    def __lt__(self, other):
-        return self.name < other.name
-
+WR_GRANDMASTER = "ctdw-ccr-ctnlmj1"
 
 class Connectivity:
-    def __init__(self, all_connections=False):
+    def __init__(self, top_switch, all_connections=False):
+        self._grandmaster = top_switch
         self._all_connections = all_connections
 
         self._devices = {}
         self._ports = {}
         self._port_connections = {}
-        self._fibers = []
+        self._fibers = []                   # TODO try to get rid of it
 
         # visjs data
         self.edges = []
         self.nodes = []
     
 
-    @staticmethod
-    def from_snmp(*args, **kwargs):
-        raise NotImplemented
-
-
     def get_device(self, name):
+        name = name.lower()
+
         if name not in self._devices:
             self._devices[name] = Device(name)
 
@@ -226,7 +144,7 @@ class Connectivity:
                 device = queue.pop(0)
 
                 if device.id:
-                    continue
+                    continue    # device already processed
 
                 device.assign_id()
 
@@ -253,7 +171,7 @@ class Connectivity:
     def process(self):
         assert(len(self.edges) == 0 and len(self.nodes) == 0)
 
-        grandmaster = self._devices[WR_GRANDMASTER]
+        grandmaster = self._devices[self._grandmaster]
 
         if self._all_connections:
             self._assign_layers_full(grandmaster)
@@ -300,7 +218,7 @@ class Connectivity:
                 except:
                     logger.info("Could not generate edge: {0}".format(fiber))
         else:
-            for name, device in self._devices.items():
+            for device in self._devices.values():
                 if device.master:
                     master = self._devices[device.master]
                     self.edges.append({ "from": device.id, "to": master.id })   # TODO description?
@@ -308,8 +226,8 @@ class Connectivity:
 
 class ConnectivityDatabase(Connectivity):
     """ Class generating connectivity information from a database/CSV file. """
-    def __init__(self, all_connections=False):
-        super(ConnectivityDatabase, self).__init__(all_connections)
+    def __init__(self, top_switch, all_connections=False):
+        super(ConnectivityDatabase, self).__init__(top_switch, all_connections)
         self._incomplete_fibers = []
 
 
@@ -323,13 +241,11 @@ class ConnectivityDatabase(Connectivity):
             for row in reader:
                 instance._process_row(row)
 
-            instance.process()
-
         return instance
 
 
     @staticmethod
-    def from_db(*args, **kwargs):
+    def from_layoutdb(*args, **kwargs):
         # Note that there are more column available in the view,
         # but they are not used by the script
         columns = ("PRIME_NAME", "PRIME_LABEL", "PRIME_PARENT_NAME",
@@ -340,14 +256,13 @@ class ConnectivityDatabase(Connectivity):
         sql_query = "SELECT {0} FROM controls_wr_fibres_v".format(", ".join(columns))
         result = cursor.execute(sql_query)
 
-        instance = ConnectivityDatabase()
+        instance = ConnectivityDatabase(*args, **kwargs)
 
         for row in result:
             # Build a dictionary with columns as the keys
             row_annotated = {columns[i]: row[i] for i in range(len(columns))}
             instance._process_row(row_annotated)
 
-        instance.process()
         return instance
 
 
@@ -435,25 +350,167 @@ class ConnectivityDatabase(Connectivity):
         super(ConnectivityDatabase, self).process()
 
 
+class ConnectivityPTP(Connectivity):
+    """ Class generating connectivity information from SNMP/PTP (not LLDP). """
+    def __init__(self, top_switch, all_connections=False):
+        super(ConnectivityPTP, self).__init__(top_switch, all_connections)
+        self._sfp_port_count = 18                   # TODO do not hardcode, anticipate 24 port switches
+        self._build_mac_db()
+
+
+    def get_device(self, name):
+        # Nearly the same as Connectivity.get_device() but this one creates switches
+        name = name.lower()
+
+        if name not in self._devices:
+            self._devices[name] = Switch(name)
+
+        return self._devices[name]
+
+
+    def get_port_by_mac(self, mac):
+        try:
+            return self._ports[ConnectivityPTP._sanitize_mac(mac)]
+        except KeyError:
+            return None
+
+
+    def get_switch_by_mac(self, mac):
+        port = self.get_port_by_mac(mac)
+
+        if port is None or not port.device:
+            return None
+
+        try:
+            return self._devices[port.device]
+        except KeyError:
+            return None
+
+
+    def _build_mac_db(self):
+        for entry in ccda.wr_switches():
+            switch_name = entry["name"]
+
+            try:
+                switch = self.get_device(switch_name)
+            except:
+                logger.warning(f"Could not connect to {switch_name}")
+                continue
+
+            try:
+                # Get the MAC address of the first SFP port (remaining SFP ports have consecutive addresses)
+                mac1 = switch.sfp_port_mac(1)
+                # Convert the MAC address to an int, to easily compute other port MAC addresses
+                mac1_num = ConnectivityPTP._mac_to_int(mac1)
+
+                # Bind all MACs to the switch
+                for p in self._sfp_port_range():
+                    # Compute the port MAC address, store in hex format
+                    mac_str = ConnectivityPTP._compute_mac(mac1_num, p)
+
+                    # Register the port, to create connections
+                    assert(mac_str not in self._ports)  # Check for duplicates
+                    new_port = self.get_port(mac_str)
+                    new_port.label = p             # Port number, indexed from 1
+                    new_port.device = switch_name
+                    switch.add_port(new_port)
+                    logger.debug(f"MAC DB: {mac_str} -> {switch_name}")
+            except ConnectionError:
+                logger.warning(f"Could not connect to {switch_name}")
+
+
+    def _process_switch(self, switch: Switch):
+        logger.debug(f"Processing {switch.name}")
+
+        # Get the first SFP port MAC address as an integer (to compute MAC addresses of the remaining ports)
+        my_mac1_num = ConnectivityPTP._mac_to_int(switch.sfp_port_mac(1))
+
+        # Check what is connected to each SFP port...
+        for p in self._sfp_port_range():
+            peer_mac = switch.sfp_port_peer_mac(p)
+
+            if peer_mac == None:
+                continue        # nothing connected to the port
+
+            try:
+                my_mac = ConnectivityPTP._compute_mac(my_mac1_num, p)
+                my_port = self._ports[my_mac]
+                peer_port = self._ports[peer_mac]
+                self._add_fiber(Fiber(my_port, peer_port))
+                logger.debug(f"   {my_port} <-> {peer_port}")
+            except KeyError:
+                logger.warning(f"Unknown MAC address {peer_mac} on {my_port}")
+
+
+    def process(self):
+        # Add fibers basing on the LLDP data
+        for s in self._devices.values():
+            try:
+                self._process_switch(s)
+            except ConnectionError:
+                logger.warning(f"Could not process {s.name}")
+
+        super(ConnectivityPTP, self).process()
+
+
+    @staticmethod
+    def _sanitize_mac(mac):
+        """ Converts MAC address to the format used by the class. """
+        sanitized = mac.replace(':', '').replace('-', '').lower()
+        assert(len(sanitized) == 12)
+        return sanitized
+
+
+    @staticmethod
+    def _int_to_mac(mac_int):
+        """ Converts an integer to a hexadecimal number representing a MAC address. """
+        return '{0:012x}'.format(mac_int)
+
+
+    @staticmethod
+    def _mac_to_int(mac_str):
+        """ Converts a string representing a (sanitized) MAC address to an integer. """
+        return int(mac_str, 16)
+
+
+    @staticmethod
+    def _compute_mac(mac1_num, port_index):
+        """ Calculates MAC address using first SFP port MAC address and the requested SFP port number (indexed from 1). """
+        return ConnectivityPTP._int_to_mac(mac1_num + port_index - 1)
+
+
+    def _sfp_port_range(self):
+        """ Returns the range used to iterate through SFP ports. """
+        return range(1, self._sfp_port_count + 1)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generates WR connectivity information (JSON format)")
     
-    parser.add_argument('--source', '-s', choices=('layoutdb', 'snmp', 'csv'), required=True,
-            help='Data source.')
-    parser.add_argument('--output', '-o', type=str, default='connectivity.json',
-            help='Output file name.')
-    parser.add_argument('--all', action='store_true',
-            help='Include all connections (may create a non-tree structure).')
+    parser.add_argument("--source", "-s", choices=("layoutdb", "ptp", "csv"), required=True,
+            help="Data source.")
+    parser.add_argument("--output", "-o", type=str, default="connectivity.json",
+            help="Output file name.")
+    parser.add_argument("--verbose", "-v", action="store_true",
+            help="Enable verbose output")
+    parser.add_argument("--all", action="store_true",
+            help="Include all connections (may create a non-tree structure).")
+    parser.add_argument("--top-switch", default=WR_GRANDMASTER,
+            help="Switch which should be used as the top of the tree (grandmaster).")
     args = parser.parse_args()
 
-    if args.source == 'layoutdb':  
-        conn = Connectivity.from_db(all_connections=args.all)
-    elif args.source == 'snmp':
-        conn = Connectivity.from_snmp(all_connections=args.all)
-    elif args.source == 'csv':
-        conn = Connectivity.from_csv("connections.csv", all_connections=args.all)
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
 
-    logger.info("Incomplete fibers: {0}".format(len(conn._incomplete_fibers)))
+    if args.source == "layoutdb":
+        conn = ConnectivityDatabase.from_layoutdb(args.top_switch, all_connections=args.all)
+    elif args.source == "csv":
+        conn = ConnectivityDatabase.from_csv(args.top_switch, "connections.csv", all_connections=args.all)
+    elif args.source == "ptp":
+        conn = ConnectivityPTP(args.top_switch, all_connections=args.all)
+
+    conn.process()
+    # logger.info("Incomplete fibers: {0}".format(len(conn._incomplete_fibers)))
     logger.info("Fibers: {0} Devices: {1}".format(len(conn._fibers), len(conn._devices)))
 
     #for name, device in conn._devices.items():

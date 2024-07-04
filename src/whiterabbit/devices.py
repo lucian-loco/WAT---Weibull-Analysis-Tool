@@ -1,4 +1,84 @@
 #!/usr/bin/env python3
+
+class Port:
+    SWITCH_PORT_PREFIX = "CTDNT"
+
+    def __init__(self, name, label=None, device=None, mac=None):
+        self.name = name                # as in LayoutDB, e.g. CTDNT.168.BC
+        self.label = label              # normally label is the port number, but not always
+        self.device = device            # parent WR device name
+        self.mac = mac.replace('-', ':').upper() if mac else None
+
+
+    @property
+    def is_wrs_port(self):
+        return self.name.upper().startswith(Port.SWITCH_PORT_PREFIX)
+
+
+    def __eq__(self, other):
+        return self.name == other.name and self.label == other.label and self.device == other.device
+
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+    def __repr__(self):
+        if isinstance(self.label, int):
+            return "Port {0:02}/{1} ({2})".format(self.label, self.device, self.name)
+        else:
+            return "Port {0}/{1} ({2})".format(self.label, self.device, self.name)
+
+
+class Device:
+    SWITCH_NAME_PREFIX = "ctdw"
+
+    @staticmethod
+    def id_generator(start=1):
+        number = start
+        while True:
+            yield number
+            number += 1
+
+    _id_gen = id_generator(1)
+
+    def __init__(self, name):
+        assert(name is not None)
+        self.name = name.lower()
+        self.master = None
+        self.id = None
+        self.layer = 0
+        self.ports = {}
+
+
+    def is_switch(self):
+        return self.name.startswith(Device.SWITCH_NAME_PREFIX)
+
+
+    def add_port(self, port):
+        if port.name not in self.ports:
+            self.ports[port.name] = port
+        else:
+            assert(port == self.ports[port.name])
+
+
+    def sorted_ports(self):
+        return sorted(self.ports.values(), key=lambda x: x.label)
+
+
+    def assign_id(self):
+        assert(self.id is None)
+        self.id = next(Device._id_gen)
+
+
+    def __repr__(self):
+        return "Device {0}".format(self.name)
+
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+
 class Fiber:
     """
     Class representing a fiber connection.

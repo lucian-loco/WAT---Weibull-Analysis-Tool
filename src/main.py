@@ -110,9 +110,9 @@ def route_wr_connections_layout():
     return send_file('whiterabbit/data/connectivity_layoutdb.json')
 
 
-@app.route('/whiterabbit/connections/snmp')
-def route_wr_connections_snmp():
-    return send_file('whiterabbit/data/connectivity_snmp.json')
+@app.route('/whiterabbit/connections/ptp')
+def route_wr_connections_ptp():
+    return send_file('whiterabbit/data/connectivity_ptp.json')
 
 
 if __name__ == '__main__':

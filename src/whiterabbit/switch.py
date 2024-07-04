@@ -1,17 +1,27 @@
 #!/usr/bin/env python3
-from easysnmp import Session
 from enum import IntEnum
+from devices import Device
+import easysnmp
+import sys
+import os.path
+# add path to import modules from the directory above
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 import ccda
 
-class PortMode:
+class PortMode(IntEnum):
+    UNKNOWN = 0
     MASTER = 1
     SLAVE = 2
-    UNKNOWN = 255
+    NON_WR = 3
+    AUTO = 4
+    NONE = 5
 
-class Switch:
-    def __init__(self, hostname):
-        self._hostname = hostname
-        self._snmp = Session(hostname=hostname, community='public', version=2)
+# TODO use getbulk?
+
+class Switch(Device):
+    def __init__(self, name):
+        super(Switch, self).__init__(name)
+        self._snmp = easysnmp.Session(hostname=name, community='public', version=2, retries=1, timeout=0.5)
         self._port_min = 1
         self._port_max = 18
         self._ccda_data = None          # cache for static data fetched using CCDA
@@ -31,7 +41,7 @@ class Switch:
         def _query_if_needed(self):
             try:
                 if self._ccda_data is None:
-                    self._ccda_data = ccda.computer_by_name(self._hostname)
+                    self._ccda_data = ccda.computer_by_name(self.name)
             except:
                 return None
 
@@ -41,7 +51,14 @@ class Switch:
 
 
     def _get_snmp(self, oid):
-        response = self._snmp.get(oid)
+        try:
+            response = self._snmp.get(oid)
+        except easysnmp.exceptions.EasySNMPTimeoutError as e:
+            exception = str(e)
+            response = None
+
+        if response is None:
+            raise ConnectionError(exception) 
 
         if response.snmp_type in ('TICKS', 'INTEGER', 'Counter64'):
             return int(response.value)
@@ -106,31 +123,39 @@ class Switch:
         return self._get_snmp(f'.1.3.6.1.2.1.2.2.1.6.{index+2}')
 
     @port_check
-    def sfp_port_link(self, index):
+    def sfp_port_link_up(self, index):
         return self._get_snmp(f'.1.3.6.1.4.1.96.100.7.6.1.3.{index}') == 2
 
     @port_check
     def sfp_port_mode(self, index):
         mode = self._get_snmp(f'.1.3.6.1.4.1.96.100.7.6.1.4.{index}')
 
-        # TODO check
-        if mode == 1:
-            return PortMode.MASTER
-        elif mode == 2:
-            return PortMode.SLAVE
-        else:
+        try:
+            return PortMode(mode)
+        except ValueError:
             return PortMode.UNKNOWN
 
     @port_check
     def sfp_port_peer_mac(self, index):
-        return self._get_snmp(f'.1.3.6.1.4.1.96.100.7.8.1.22.{index}.1')
+        mac = self._get_snmp(f'.1.3.6.1.4.1.96.100.7.8.1.22.{index}.1')
+
+        if mac == "000000000000":   # nothing was ever connected here
+            return None
+
+        # Check if the port is really up
+        # (it may happen that a device used to be connected there,
+        # now it is disconnected but MAC is still preserved).
+        if not self.sfp_port_link_up(index):
+            return None
+
+        return mac
 
     @port_check
     def sfp_port_peer_vid(self, index):
         return self._get_snmp(f'.1.3.6.1.4.1.96.100.7.8.1.23.{index}.1')
 
     @port_check
-    def sfp_port_ptp_status(self, index):
+    def sfp_port_ptp_status_ok(self, index):
         return self._get_snmp(f'.1.3.6.1.4.1.96.100.7.8.1.26.{index}.1') == 1
 
 
@@ -138,5 +163,6 @@ if __name__ == "__main__":
     switch = Switch('ctdwa-774-cins3')
     print(switch.description)
     print(switch.mgmt_port_mac)
-    print(switch.sfp_port_mac(1))
-    print(switch.sfp_port_peer_mac(3))
+
+    for p in range(1, 19):
+        print(switch.sfp_port_peer_mac(p))
