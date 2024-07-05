@@ -48,7 +48,8 @@ def route_crate_get():
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
-    return send_file(graph, mimetype='text/drawio', download_name=f'{crate_name}.drawio')
+    return send_file(graph, mimetype='text/drawio',
+                     as_attachment=True, download_name=f'{crate_name}.drawio')
 
 
 if __name__ == '__main__':
