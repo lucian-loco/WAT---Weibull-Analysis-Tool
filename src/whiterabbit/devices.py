@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 
 class Port:
-    SWITCH_PORT_PREFIX = "CTDNT"
-
+    """
+    Class representing a White Rabbit switch port.
+    """
     def __init__(self, name, label=None, device=None, mac=None):
         self.name = name                # as in LayoutDB, e.g. CTDNT.168.BC
         self.label = label              # normally label is the port number, but not always
         self.device = device            # parent WR device name
         self.mac = mac.replace('-', ':').upper() if mac else None
-
-
-    @property
-    def is_wrs_port(self):
-        return self.name.upper().startswith(Port.SWITCH_PORT_PREFIX)
 
 
     def __eq__(self, other):
@@ -31,16 +27,22 @@ class Port:
 
 
 class Device:
+    """
+    Class representing a network device
+    (e.g. White Rabbit switch, White Rabbit node, etc.)
+    """
     SWITCH_NAME_PREFIX = "ctdw"
 
     @staticmethod
     def id_generator(start=1):
+        """ Generates unique device IDs """
         number = start
         while True:
             yield number
             number += 1
 
     _id_gen = id_generator(1)
+
 
     def __init__(self, name):
         assert(name is not None)
@@ -63,6 +65,7 @@ class Device:
 
 
     def sorted_ports(self):
+        """ Returns ports sorted by label. """
         return sorted(self.ports.values(), key=lambda x: x.label)
 
 
@@ -97,12 +100,6 @@ class Fiber:
     @property
     def end(self):
         return self._nodes[-1]
-
-
-    @property
-    def is_complete(self):
-        """ Checks whether this fiber connects two WR switches together (and not e.g. a patch panel) """
-        return self.start.is_wrs_port and self.end.is_wrs_port
 
 
     def merge(self, other):

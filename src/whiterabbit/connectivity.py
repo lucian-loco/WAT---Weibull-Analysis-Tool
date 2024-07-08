@@ -225,6 +225,8 @@ class Connectivity:
 
 
 class ConnectivityDatabase(Connectivity):
+    SWITCH_PORT_PREFIX = "CTDNT"
+
     """ Class generating connectivity information from a database/CSV file. """
     def __init__(self, top_switch, all_connections=False):
         super(ConnectivityDatabase, self).__init__(top_switch, all_connections)
@@ -246,11 +248,14 @@ class ConnectivityDatabase(Connectivity):
 
     @staticmethod
     def from_layoutdb(*args, **kwargs):
-        # Note that there are more column available in the view,
+        """
+        Retrieves connectivity data from the Layout database.
+        """
+        # Note that there are more columns available in the view,
         # but they are not used by the script
         columns = ("PRIME_NAME", "PRIME_LABEL", "PRIME_PARENT_NAME",
-                "PRIME_PARENT_LABEL", "SECOND_NAME", "SECOND_LABEL",
-                "SECOND_PARENT_NAME", "SECOND_PARENT_LABEL")
+                   "PRIME_PARENT_LABEL", "SECOND_NAME", "SECOND_LABEL",
+                   "SECOND_PARENT_NAME", "SECOND_PARENT_LABEL")
 
         cursor = db_hitdata.get_cursor()
         sql_query = "SELECT {0} FROM controls_wr_fibres_v".format(", ".join(columns))
@@ -296,13 +301,12 @@ class ConnectivityDatabase(Connectivity):
                 except:
                     logger.info("Skipping port '{0}' for device '{1}'".format(port_label, device_name))
 
-
         # Process fiber connection
         port1 = self.get_port(row["PRIME_NAME"])
         port2 = self.get_port(row["SECOND_NAME"])
         new_fiber = Fiber(port1, port2)
 
-        if new_fiber.is_complete:
+        if self._is_fiber_complete(new_fiber):
             # This fiber connects two switches directly, no more processing needed
             self._add_fiber(new_fiber)
         else:
@@ -322,7 +326,7 @@ class ConnectivityDatabase(Connectivity):
                 self._incomplete_fibers.remove(f)
                 f.merge(fiber)
 
-                if f.is_complete:
+                if self._is_fiber_complete(f):
                     self._add_fiber(f)
                 else:
                     self._incomplete_fibers.append(f)
@@ -345,6 +349,13 @@ class ConnectivityDatabase(Connectivity):
                     break
 
 
+    @staticmethod
+    def _is_fiber_complete(fiber: Fiber):
+        """ Checks if the fiber connects two switches directly. """
+        return fiber.start.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX) \
+             and fiber.end.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX)
+
+
     def process(self):
         self._process_incomplete_fibers()
         super(ConnectivityDatabase, self).process()
@@ -354,12 +365,12 @@ class ConnectivityPTP(Connectivity):
     """ Class generating connectivity information from SNMP/PTP (not LLDP). """
     def __init__(self, top_switch, all_connections=False):
         super(ConnectivityPTP, self).__init__(top_switch, all_connections)
-        self._sfp_port_count = 18                   # TODO do not hardcode, anticipate 24 port switches
         self._build_mac_db()
 
 
     def get_device(self, name):
-        # Nearly the same as Connectivity.get_device() but this one creates switches
+        # Nearly the same as Connectivity.get_device()
+        # but this one creates Switch objects instead of Device
         name = name.lower()
 
         if name not in self._devices:
@@ -393,18 +404,13 @@ class ConnectivityPTP(Connectivity):
 
             try:
                 switch = self.get_device(switch_name)
-            except:
-                logger.warning(f"Could not connect to {switch_name}")
-                continue
-
-            try:
                 # Get the MAC address of the first SFP port (remaining SFP ports have consecutive addresses)
-                mac1 = switch.sfp_port_mac(1)
+                mac1 = switch.snmp.sfp_port_mac(1)
                 # Convert the MAC address to an int, to easily compute other port MAC addresses
                 mac1_num = ConnectivityPTP._mac_to_int(mac1)
 
                 # Bind all MACs to the switch
-                for p in self._sfp_port_range():
+                for p in switch.snmp.sfp_port_range():
                     # Compute the port MAC address, store in hex format
                     mac_str = ConnectivityPTP._compute_mac(mac1_num, p)
 
@@ -423,11 +429,11 @@ class ConnectivityPTP(Connectivity):
         logger.debug(f"Processing {switch.name}")
 
         # Get the first SFP port MAC address as an integer (to compute MAC addresses of the remaining ports)
-        my_mac1_num = ConnectivityPTP._mac_to_int(switch.sfp_port_mac(1))
+        my_mac1_num = ConnectivityPTP._mac_to_int(switch.snmp.sfp_port_mac(1))
 
         # Check what is connected to each SFP port...
-        for p in self._sfp_port_range():
-            peer_mac = switch.sfp_port_peer_mac(p)
+        for p in switch.snmp.sfp_port_range():
+            peer_mac = switch.snmp.sfp_port_peer_mac(p)
 
             if peer_mac == None:
                 continue        # nothing connected to the port
@@ -477,11 +483,6 @@ class ConnectivityPTP(Connectivity):
     def _compute_mac(mac1_num, port_index):
         """ Calculates MAC address using first SFP port MAC address and the requested SFP port number (indexed from 1). """
         return ConnectivityPTP._int_to_mac(mac1_num + port_index - 1)
-
-
-    def _sfp_port_range(self):
-        """ Returns the range used to iterate through SFP ports. """
-        return range(1, self._sfp_port_count + 1)
 
 
 if __name__ == "__main__":
