@@ -31,7 +31,7 @@ class Connectivity:
         # visjs data
         self.edges = []
         self.nodes = []
-    
+
 
     def get_device(self, name):
         name = name.lower()
@@ -68,14 +68,16 @@ class Connectivity:
         return str(fiber)
 
 
-    # Returns port connected to this_port on the other connection end
-    # E.g. if port A is connected to port B, then get_peer_port(A) == B
     def get_peer_port(self, this_port):
+        """
+          Returns port connected to this_port on the other connection end.
+          E.g. if port A is connected to port B, then get_peer_port(A) == B.
+        """
         return self._ports[self._port_connections[this_port].name]
 
 
-    # Returns device connected to this_port on the other connection end
     def get_peer_device(self, this_port):
+        """ Returns device connected to this_port on the other connection end. """
         return self._devices[self.get_peer_port(this_port).device]
 
 
@@ -469,13 +471,13 @@ class ConnectivityPTP(Connectivity):
 
     @staticmethod
     def _int_to_mac(mac_int):
-        """ Converts an integer to a hexadecimal number representing a MAC address. """
+        """ Converts an integer to a string containing hexadecimal number representing a MAC address. """
         return '{0:012x}'.format(mac_int)
 
 
     @staticmethod
     def _mac_to_int(mac_str):
-        """ Converts a string representing a (sanitized) MAC address to an integer. """
+        """ Converts a string representing a MAC address in hexadecimal format to an integer. """
         return int(mac_str, 16)
 
 
