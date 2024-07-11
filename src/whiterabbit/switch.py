@@ -251,7 +251,14 @@ class Switch(Device):
     def __init__(self, name):
         super(Switch, self).__init__(name)
         self.ccda = SwitchCCDA(name)
-        self.snmp = SwitchSNMP(name)
+
+        try:
+            self.snmp = SwitchSNMP(name)
+        # Convert SNMP exceptions to ConnectionError
+        except easysnmp.exceptions.EasySNMPConnectionError as e:
+            raise ConnectionError from e
+        except easysnmp.exceptions.EasySNMPTimeoutError as e:
+            raise ConnectionError from e
 
 
 if __name__ == "__main__":

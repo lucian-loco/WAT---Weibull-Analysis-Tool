@@ -22,7 +22,10 @@ class Connectivity:
     def __init__(self, top_switch, all_connections=False):
         self._grandmaster = top_switch
         self._all_connections = all_connections
+        self.clear()
 
+
+    def clear(self):
         self._devices = {}
         self._ports = {}
         self._port_connections = {}
@@ -79,6 +82,12 @@ class Connectivity:
     def get_peer_device(self, this_port):
         """ Returns device connected to this_port on the other connection end. """
         return self._devices[self.get_peer_port(this_port).device]
+
+
+    def save_to_json(self, filename):
+        """ Saves connectivity data to a JSON file. """
+        with open(filename, "w") as output:
+            json.dump({"edges": self.edges, "nodes": self.nodes}, output)
 
 
     def _add_fiber(self, fiber):
@@ -289,7 +298,7 @@ class ConnectivityDatabase(Connectivity):
             port.label = port_label
             port.device = device_name
 
-            if port.is_wrs_port:
+            if ConnectivityDatabase._is_wrs_port(port):
                 try:
                     device = self.get_device(device_name)
 
@@ -354,8 +363,14 @@ class ConnectivityDatabase(Connectivity):
     @staticmethod
     def _is_fiber_complete(fiber: Fiber):
         """ Checks if the fiber connects two switches directly. """
-        return fiber.start.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX) \
-             and fiber.end.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX)
+        return ConnectivityDatabase._is_wrs_port(fiber.start) \
+            and ConnectivityDatabase._is_wrs_port(fiber.end)
+
+
+    @staticmethod
+    def _is_wrs_port(port: Port):
+        """ Checks if the port is a White Rabbit Switch port. """
+        return port.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX)
 
 
     def process(self):
@@ -367,7 +382,6 @@ class ConnectivityPTP(Connectivity):
     """ Class generating connectivity information from SNMP/PTP (not LLDP). """
     def __init__(self, top_switch, all_connections=False):
         super(ConnectivityPTP, self).__init__(top_switch, all_connections)
-        self._build_mac_db()
 
 
     def get_device(self, name):
@@ -401,33 +415,38 @@ class ConnectivityPTP(Connectivity):
 
 
     def _build_mac_db(self):
+        """ Scans all WR switches to build a MAC address database. """
         for entry in ccda.wr_switches():
             switch_name = entry["name"]
 
             try:
                 switch = self.get_device(switch_name)
-                # Get the MAC address of the first SFP port (remaining SFP ports have consecutive addresses)
-                mac1 = switch.snmp.sfp_port_mac(1)
-                # Convert the MAC address to an int, to easily compute other port MAC addresses
-                mac1_num = ConnectivityPTP._mac_to_int(mac1)
-
-                # Bind all MACs to the switch
-                for p in switch.snmp.sfp_port_range():
-                    # Compute the port MAC address, store in hex format
-                    mac_str = ConnectivityPTP._compute_mac(mac1_num, p)
-
-                    # Register the port, to create connections
-                    assert(mac_str not in self._ports)  # Check for duplicates
-                    new_port = self.get_port(mac_str)
-                    new_port.label = p             # Port number, indexed from 1
-                    new_port.device = switch_name
-                    switch.add_port(new_port)
-                    logger.debug(f"MAC DB: {mac_str} -> {switch_name}")
+                self._process_switch_ports(switch)
             except ConnectionError:
                 logger.warning(f"Could not connect to {switch_name}")
 
 
-    def _process_switch(self, switch: Switch):
+    def _process_switch_ports(self, switch: Switch):
+        # Get the MAC address of the first SFP port (remaining SFP ports have consecutive addresses)
+        mac1 = switch.snmp.sfp_port_mac(1)
+        # Convert the MAC address to an int, to easily compute other port MAC addresses
+        mac1_num = ConnectivityPTP._mac_to_int(mac1)
+
+        # Bind all MACs to the switch
+        for p in switch.snmp.sfp_port_range():
+            # Compute the port MAC address, store in hex format
+            mac_str = ConnectivityPTP._compute_mac(mac1_num, p)
+
+            # Register the port, to create connections
+            assert(mac_str not in self._ports)  # Check for duplicates
+            new_port = self.get_port(mac_str)
+            new_port.label = p             # Port number, indexed from 1
+            new_port.device = switch.name
+            switch.add_port(new_port)
+            logger.debug(f"MAC DB: {mac_str} -> {switch.name}")
+
+
+    def _process_switch_connections(self, switch: Switch):
         logger.debug(f"Processing {switch.name}")
 
         # Get the first SFP port MAC address as an integer (to compute MAC addresses of the remaining ports)
@@ -451,10 +470,14 @@ class ConnectivityPTP(Connectivity):
 
 
     def process(self):
+        # TODO instead of clearing, it would be better to track changes and update only what is needed
+        self.clear()
+        self._build_mac_db()
+
         # Add fibers basing on the LLDP data
         for s in self._devices.values():
             try:
-                self._process_switch(s)
+                self._process_switch_connections(s)
             except ConnectionError:
                 logger.warning(f"Could not process {s.name}")
 
@@ -521,6 +544,5 @@ if __name__ == "__main__":
     #    for port_number, port_data in device._ports.items():
     #        print(port_data)
 
-    # Save graph data
-    with open(args.output, "w") as output:
-        json.dump({"edges": conn.edges, "nodes": conn.nodes}, output)
+    # Save the graph data
+    conn.save_to_json(args.output)
