@@ -10,13 +10,12 @@ import db_hitdata
 import ccda
 import csv
 
+import config
 from switch import Switch
 from devices import *
 
 logging.basicConfig(format='%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
-
-WR_GRANDMASTER = "ctdw-ccr-ctnlmj1"
 
 class Connectivity:
     def __init__(self, top_switch, all_connections=False):
@@ -521,7 +520,7 @@ if __name__ == "__main__":
             help="Enable verbose output")
     parser.add_argument("--all", action="store_true",
             help="Include all connections (may create a non-tree structure).")
-    parser.add_argument("--top-switch", default=WR_GRANDMASTER,
+    parser.add_argument("--top-switch", default=config.WR_GRANDMASTER,
             help="Switch which should be used as the top of the tree (grandmaster).")
     args = parser.parse_args()
 
