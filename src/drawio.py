@@ -143,7 +143,7 @@ class Style:
 
         # TODO surely there is a lot of things missing here
         self.__add_attribute(StyleAttrEnum('align', ('left', 'center', 'right')))
-        self.__add_attribute(StyleAttrEnum('aspect', ('fixed')))
+        self.__add_attribute(StyleAttrEnum('aspect', ('fixed', 'variable')))
         self.__add_attribute(StyleAttrEnum('direction', ('north', 'south', 'east', 'west')))
         self.__add_attribute(StyleAttrColor('fillColor'))
         self.__add_attribute(StyleAttrInt('fontSize'))
