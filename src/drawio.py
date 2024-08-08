@@ -41,6 +41,14 @@ class StyleAttrBool(StyleAttrAbstract):
         super(StyleAttrBool, self).__init__(name)
 
     def set(self, value):
+        if isinstance(value, str):
+            if value.lower() in ('false', 'off', '0'):
+                value = False
+            elif value.lower() in ('true', 'on', '1'):
+                value = True
+            else:
+                raise RuntimeError('Invalid boolean value for the style attribute')
+
         self._value = '1' if value else '0'
 
 
