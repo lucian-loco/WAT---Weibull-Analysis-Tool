@@ -365,10 +365,20 @@ class Generator:
         self._libraries[name] = Library(filename)
 
 
-    def add_shape(self, library_name, shape_name, x, y, scale=1.0, style=None):
+    def get_shape(self, library_name, shape_name):
         library = self._libraries[library_name]
-        shape = library._shapes[shape_name]
-        geometry = self._create_geometry(x, y, shape.width * scale, shape.height * scale)
+        return library._shapes[shape_name]
+
+
+    def add_shape(self, library_name, shape_name, x, y, width=None, height=None, style=None):
+        shape = self.get_shape(library_name, shape_name)
+
+        if width is None:
+            width = shape.width
+        if height is None:
+            height = shape.height
+
+        geometry = self._create_geometry(x, y, width, height)
         shape_style = copy.deepcopy(shape.style)
 
         if style:
