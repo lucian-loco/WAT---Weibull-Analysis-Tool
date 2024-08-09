@@ -8,7 +8,7 @@ fi
 
 
 DRAWIO_LIBRARY_URL="https://api.cernbox.cern.ch/remote.php/dav/files/$EOS_USER/eos/project/h/hit/draw.io/Installation"
-OUTPUT_DIR="drawio"
+OUTPUT_DIR="src/static/drawio"
 FILES=(
     "Chassis+Rack.xml"
     "Modules 3U.xml"

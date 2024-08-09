@@ -3,5 +3,5 @@ venv
 .venv
 .vscode
 .idea
-drawio
+src/static/drawio
 __pycache__

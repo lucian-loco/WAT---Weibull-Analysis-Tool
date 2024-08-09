@@ -114,7 +114,7 @@ def generate_graph(crate):
 # Create the generator instance and load the templates once
 generator = drawio.Generator()
 
-for filepath in glob.glob(os.path.join('../drawio', '*.xml')):
+for filepath in glob.glob(os.path.join('static/drawio', '*.xml')):
     try:
         generator.load_library(filepath)
     except:
