@@ -134,36 +134,44 @@ class StyleAttrColor(StyleAttrAbstract):
 
 
 class Style:
-    def __add_attribute(self, attr):
-        self._attributes[attr._name] = attr
+    __valid_attributes = {
+        'align': StyleAttrEnum('align', ('left', 'center', 'right')),
+        'aspect': StyleAttrEnum('aspect', ('fixed', 'variable')),
+        'direction': StyleAttrEnum('direction', ('north', 'south', 'east', 'west')),
+        'fillColor': StyleAttrColor('fillColor'),
+        'fontSize': StyleAttrInt('fontSize'),
+        'horizontal': StyleAttrBool('horizontal'),
+        'html': StyleAttrBool('html'),
+        'image': StyleAttrStr('image'),
+        'imageAspect': StyleAttrBool('imageAspect'),
+        'labelBackground': StyleAttrColor('labelBackgroundColor'),
+        'points': StyleAttrStr('points'),
+        'rotation': StyleAttrInt('rotation'),
+        'rounded': StyleAttrBool('rounded'),
+        'shape': StyleAttrEnum('shape', ('image',)),
+        'strokeColor': StyleAttrColor('strokeColor'),
+        'text': StyleAttrFlag('text'),
+        'verticalAlign': StyleAttrEnum('verticalAlign', ('top', 'middle', 'bottom')),
+        'verticalLabelPosition': StyleAttrEnum('verticalLabelPosition', ('top', 'middle', 'bottom')),
+        'whiteSpace': StyleAttrEnum('whiteSpace', ('wrap',)),
+    }
+
+
+    @staticmethod
+    def __attribute_factory(name):
+        if name not in Style.__valid_attributes:
+            raise KeyError('Invalid style attribute')
+
+        return copy.deepcopy(Style.__valid_attributes[name])
 
 
     def __init__(self, *args, **kwargs):
-        self._attributes = {}
-
-        # TODO surely there is a lot of things missing here
-        self.__add_attribute(StyleAttrEnum('align', ('left', 'center', 'right')))
-        self.__add_attribute(StyleAttrEnum('aspect', ('fixed', 'variable')))
-        self.__add_attribute(StyleAttrEnum('direction', ('north', 'south', 'east', 'west')))
-        self.__add_attribute(StyleAttrColor('fillColor'))
-        self.__add_attribute(StyleAttrInt('fontSize'))
-        self.__add_attribute(StyleAttrBool('horizontal'))
-        self.__add_attribute(StyleAttrBool('html'))
-        self.__add_attribute(StyleAttrStr('image'))
-        self.__add_attribute(StyleAttrBool('imageAspect'))
-        self.__add_attribute(StyleAttrColor('labelBackgroundColor'))
-        self.__add_attribute(StyleAttrStr('points'))
-        self.__add_attribute(StyleAttrInt('rotation'))
-        self.__add_attribute(StyleAttrBool('rounded'))
-        self.__add_attribute(StyleAttrEnum('shape', ('image',)))
-        self.__add_attribute(StyleAttrColor('strokeColor'))
-        self.__add_attribute(StyleAttrFlag('text'))
-        self.__add_attribute(StyleAttrEnum('verticalAlign', ('top', 'middle', 'bottom')))
-        self.__add_attribute(StyleAttrEnum('verticalLabelPosition', ('top', 'middle', 'bottom')))
-        self.__add_attribute(StyleAttrEnum('whiteSpace', ('wrap',)))
+        self._attributes = dict()
 
         for k, v in kwargs.items():
-            self._attributes[k].set(v)
+            new_attr = Style.__attribute_factory(k)
+            new_attr.set(v)
+            self._attributes[k] = new_attr
 
 
     @staticmethod
@@ -177,17 +185,33 @@ class Style:
             k_v_splitted = k_v.split('=')
             key = k_v_splitted[0]
             value = ''.join(k_v_splitted[1:])
-            new_style._attributes[key].set(value)
+            new_style.__getattr__(key).set(value)
 
         return new_style
 
 
     def apply(self, other):
-        for name, attr in other._attributes.items():
-            value = attr.get()
+            """
+            Applies the attributes from another object to this object.
+            If attributes exist in other object, but not in self - they are copied.
+            If attributes exist in both self and other objects - other object overrides self.
 
-            if value is not None:
-                self._attributes[name].set(value)
+            Args:
+                other: Another object containing attributes to be applied.
+
+            Returns:
+                None
+            """
+            for name, attr in other._attributes.items():
+                value = attr.get()
+
+                if value is not None:
+                    self.__getattr__(name).set(value)
+
+
+    def copy(self):
+        """ Returns a deep copy of the object. """
+        return copy.deepcopy(self)
 
 
     def __copy__(self):
@@ -204,23 +228,20 @@ class Style:
         return new_obj
 
 
-#    def __setattr__(self, item, value):
-#        if item not in self._attributes:
-#            raise KeyError('Invalid style attribute')
-#
-#        self._attributes[item].set(value)
-
-
     def __getattr__(self, item):
+        if item not in self._attributes.keys() and item in Style.__valid_attributes:
+            self._attributes[item] = Style.__attribute_factory(item)
+
         if item in self._attributes.keys():
             return self._attributes[item]
+
         raise AttributeError(item)
 
 
     def __str__(self):
         style = ''
 
-        for name, attr in self._attributes.items():
+        for attr in self._attributes.values():
             if attr.get() is None:
                 continue
 
@@ -250,7 +271,7 @@ class Shape:
 
         xml_tree = parseString(xml_raw_data)
         # Reach the last mxCell, which actually describes the shape
-        mxcell = xml_tree.firstChild.firstChild.childNodes[-1]  
+        mxcell = xml_tree.firstChild.firstChild.childNodes[-1]
         return Style.from_style_str(mxcell.getAttribute('style'))
 
 
@@ -260,9 +281,9 @@ class Shape:
         style = Style(shape='image',
             verticalLabelPosition='bottom',
             labelBackgroundColor='default',
-            verticalAlign='top',
-            aspect='fixed',
-            imageAspect=False)
+            verticalAlign='top')
+            #aspect='fixed',
+            #imageAspect=False)
 
         # ';base64' must be removed for some reason when a shape is instantiated
         image = shape_dict['data'].replace(
@@ -476,6 +497,9 @@ class Generator:
 
 
     def _create_geometry(self, x, y, width, height):
+        for i in (x, y, width, height):
+            assert(isinstance(i, int) or isinstance(i, float))
+
         element = self._document.createElement('mxGeometry')
         element.setAttribute('x', str(x))
         element.setAttribute('y', str(y))
@@ -503,13 +527,22 @@ if __name__ == '__main__':
 
     # Create a box with text inside, using custom style
     s = Style(whiteSpace='wrap', align='center')
-    s.rounded = False
-    s.html = True
-    cell = generator.add_box(10, 20, 100, 300, text='Test', style=s)
+    s.rounded.set(False)
+    s.html.set(True)
+    generator.add_box(10, 20, 100, 300, text='Test', style=s)
 
-    # Append a shape from the template library
-    generator.add_shape('WFIP', 'TAP BOX', 10, 10, Style(rotation=45))
-    generator.add_shape('WFIP', 'TAP BOX', 20, 20, Style(rotation=-90))
+    # Create a modification of the previous style
+    new_s = s.copy()
+    new_s.rounded.set(True)
+    new_s.fillColor.set('red')
+    generator.add_box(110, 20, 100, 300, text='Test 2', style=new_s)
+
+    s.apply(new_s)
+    assert(s.fillColor.get() == 'red')
+
+    # Append some shape from the template library
+    generator.add_shape('WFIP', 'TAP BOX', 10, 10, style=Style(rotation=45))
+    generator.add_shape('WFIP', 'TAP BOX', 20, 20, style=Style(rotation=-90))
     generator.add_shape('WFIP', 'TAP BOX', 30, 30)
 
     generator.save('test.drawio')
