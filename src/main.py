@@ -47,6 +47,11 @@ def route_weibull():
     return send_file(graph, mimetype='image/png')
 
 
+@app.route('/crate/new')
+def route_crate_new():
+    drawio_libs = get_drawio_lib_urls()
+    return render_template('drawio.html', drawio_libs=drawio_libs)
+
 
 @app.route('/crate/edit', methods=['GET'])
 def route_crate_edit():
