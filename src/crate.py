@@ -70,14 +70,14 @@ class Crate:
 
     def is_front_module(self, module: Module):
         """ Checks if the module is located at the front of the crate. """
-        # the highest depth coordinate indicates the front
-        return module.depth.intersects(self.depthSlots)
+        # the lowest depth coordinate indicates the front
+        return module.depth.intersects(1)
 
 
     def is_back_module(self, module: Module):
         """ Checks if the module is located at the back of the crate. """
-        # the lowest depth coordinate indicates the back
-        return module.depth.intersects(1)
+        # the highest depth coordinate indicates the back
+        return module.depth.intersects(self.depthSlots)
 
 
     def is_module_face(self, module: Module, face: layout.Face):
@@ -176,7 +176,7 @@ def make_crate(crate):
     return crate
 
 
-def generate_graph(crate):
+def generate_graph(crate, face=layout.Face.FRONT):
     logger.debug('Generating graph for %s', crate)
 
     # Styles applied to the generated shapes
@@ -209,6 +209,9 @@ def generate_graph(crate):
         if module.width is None or module.height is None or module.depth is None:
             logger.warning('No layout data for module %s', module.position)
             continue
+
+        if not crate.is_module_face(module, face):
+            continue        # process modules visible only on the specified face (front/back)
 
         width = (module.width.length + 1) * crate.x_slot_size * scale
         height = (module.height.length + 1) * crate.y_slot_size * scale
