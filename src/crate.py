@@ -1,47 +1,22 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 from dataclasses import dataclass
 import ccda
+import layout
 import io
 import glob
 import os
 import copy
-import functools
-from enum import Enum
 import drawio
-import db_hitdata
 import shapelinks
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-class Orientation(Enum):
-    HORIZONTAL = 1
-    VERTICAL = 2
-
-
-class Face(Enum):
-    FRONT = 1
-    BACK = 2
-
-
-@dataclass
-class Dimension:
-    start: float
-    end: float
-
-
-    def __post_init__(self):
-        assert(self.start <= self.end)
-
-
-    @property
-    def length(self):
-        return self.end - self.start
-
-
-    def intersects(self, value):
-        return self.start <= value and value <= self.end
+# Constants defining the generated graph geometry
+PAGE_WIDTH = 800
+PAGE_HEIGHT = 600
+TITLE_HEIGHT = 20
 
 
 @dataclass
@@ -51,17 +26,19 @@ class Module:
     typeCode: str
     slotNumber: int
     lun: int
-    width: Dimension = None
-    height: Dimension = None
-    depth: Dimension = None
+
+    # Layout data (position expressed in slots)
+    width: layout.Slice = None
+    height: layout.Slice = None
+    depth: layout.Slice = None
 
 
     @property
     def orientation(self):
         if self.width.length > self.height.length:
-            return Orientation.HORIZONTAL
+            return layout.Orientation.HORIZONTAL
         else:
-            return Orientation.VERTICAL
+            return layout.Orientation.VERTICAL
 
 
 @dataclass
@@ -77,9 +54,9 @@ class Crate:
     width: float = None     # width in meters
     height: float = None    # height in meters
     depth: float = None     # depth in meters
-    widthDim: int = None    # number of uniform slots in the width dimension
-    heightDim: int = None   # number of uniform slots in the height dimension
-    depthDim: int = None    # number of uniform slots in the depth dimension
+    widthSlots: int = None  # number of uniform slots in the width dimension
+    heightSlots: int = None # number of uniform slots in the height dimension
+    depthSlots: int = None  # number of uniform slots in the depth dimension
 
 
     def slot(self, index):
@@ -93,64 +70,53 @@ class Crate:
 
     def is_front_module(self, module: Module):
         """ Checks if the module is located at the front of the crate. """
-        # the high depth position indicates the front
-        return module.depth.intersects(self.depthDim)
+        # the highest depth coordinate indicates the front
+        return module.depth.intersects(self.depthSlots)
 
 
     def is_back_module(self, module: Module):
         """ Checks if the module is located at the back of the crate. """
-        # the low depth position indicates the back
+        # the lowest depth coordinate indicates the back
         return module.depth.intersects(1)
 
 
-    def is_module_face(self, module: Module, face: Face):
-        if face == Face.FRONT:
+    def is_module_face(self, module: Module, face: layout.Face):
+        if face == layout.Face.FRONT:
             return self.is_front_module(module)
-        elif face == Face.BACK:
+        elif face == layout.Face.BACK:
             return self.is_back_module(module)
         else:
             raise ValueError('Invalid face')
 
 
-@functools.lru_cache(32)
-def get_crate_layout_data(equipment_code):
-    cursor = db_hitdata.get_cursor()
-    query = f"SELECT WIDTH, HEIGHT, DEPTH, WIDTH_DIM, HEIGHT_DIM, DEPTH_DIM " \
-                "FROM crate_dimensions_v WHERE EQUIPMENT_CODE = :equipment_code"
-    response = cursor.execute(query, (equipment_code,)).fetchall()
-
-    if len(response) != 1:
-        raise ValueError(f'Invalid equipment code: {equipment_code}')
-
-    return {
-        'width': response[0][0],
-        'height': response[0][1],
-        'depth': response[0][2],
-        'width_dim': response[0][3],
-        'height_dim': response[0][4],
-        'depth_dim': response[0][5]
-    }
+    @property
+    def x_slot_size(self):
+        # Returns size of each uniform slot in X dimension.
+        return self.width / self.widthSlots
 
 
-def get_module_layout_data(position):
-    cursor = db_hitdata.get_cursor()
-    # TODO MODULE_DESCRIPTION? MODULE_EQUIPMENT_CODE?
-    query = f"SELECT SLOT_NUMBER, " \
-            "H_START_NUM, H_END_NUM, " \
-            "W_START_NUM, W_END_NUM, " \
-            "D_START_NUM, D_END_NUM " \
-            "FROM module_positions_v WHERE MODULE_NAME = :position"
-    response = cursor.execute(query, (position,)).fetchall()
+    @property
+    def y_slot_size(self):
+        # Returns size of each uniform slot in Y dimension.
+        return self.height / self.heightSlots
 
-    if len(response) != 1:
-        raise ValueError(f'Invalid module position: {position}')
 
-    return {
-        'slot_number': response[0][0],
-        'height': Dimension(response[0][1], response[0][2]),
-        'width': Dimension(response[0][3], response[0][4]),
-        'depth': Dimension(response[0][5], response[0][6]),
-    }
+    @property
+    def z_slot_size(self):
+        # Returns size of each uniform slot in Z dimension.
+        return self.depth / self.depthSlots
+
+
+    def x_slot_to_coord(self, slot):
+        return slot * self.x_slot_size
+    
+
+    def y_slot_to_coord(self, slot):
+        return slot * self.y_slot_size
+    
+
+    def z_slot_to_coord(self, slot):
+        return slot * self.z_slot_size
 
 
 def make_crate(crate):
@@ -160,7 +126,7 @@ def make_crate(crate):
     assert(crate_ccde_data['typeCode'].startswith('HC'))
     crate_ccde_data['typeCode'] = crate_ccde_data['typeCode'][2:]
 
-    crate_layout_data = get_crate_layout_data(crate_ccde_data['typeCode'])
+    crate_layout_data = layout.get_crate(crate_ccde_data['typeCode'])
 
     crate = Crate(
             position     = crate_ccde_data['name'],
@@ -173,9 +139,9 @@ def make_crate(crate):
             width        = crate_layout_data['width'],
             height       = crate_layout_data['height'],
             depth        = crate_layout_data['depth'],
-            widthDim     = crate_layout_data['width_dim'],
-            heightDim    = crate_layout_data['height_dim'],
-            depthDim     = crate_layout_data['depth_dim'],
+            widthSlots   = crate_layout_data['width_dim'],
+            heightSlots  = crate_layout_data['height_dim'],
+            depthSlots   = crate_layout_data['depth_dim'],
 
             modules      = [])
 
@@ -192,14 +158,16 @@ def make_crate(crate):
             lun        = module_ccde_data['lun'])
 
         try:
-            module_layout_data = get_module_layout_data(module_ccde_data['name'])
+            module_layout_data = layout.get_module(module_ccde_data['name'])
             module.width      = module_layout_data['width']
             module.height     = module_layout_data['height']
             module.depth      = module_layout_data['depth']
 
             if module_ccde_data['slotNumber'] != module_layout_data['slot_number']:
-                logger.warning('Slot number mismatch for %s (CCDE:%d / Layout:%d)',
-                                module_ccde_data['name'], module_ccde_data['slotNumber'], module_layout_data['slot_number'])
+                logger.warning('Slot number mismatch for {0} (CCDE:{1} / Layout:{2})',
+                                    module_ccde_data['name'],
+                                    module_ccde_data['slotNumber'],
+                                    module_layout_data['slot_number'])
         except ValueError as e:
             logger.warning('Could not find module layout data for %s', module_ccde_data['name'])
 
@@ -209,46 +177,71 @@ def make_crate(crate):
 
 
 def generate_graph(crate):
-    # TODO do not hardcode slot dimensions
-    SLOT_COUNT = 20
-    SLOT_WIDTH = 13
-    SLOT_HEIGHT = 157
-    START_X = 0
-    START_Y = 0
-    SHAPE_OFFSET_X = -72
-    SHAPE_OFFSET_Y = 72
+    logger.debug('Generating graph for %s', crate)
 
-    crate = make_crate(crate)
-
-    generator.clear_page(320, 240)
-    generator.add_box(10, 200, 200, 20, text=crate.name)
+    # Styles applied to the generated shapes
     box_style = drawio.Style(horizontal=False, direction='west')    # slot boxes (when missing graphics)
     slot_style = copy.deepcopy(box_style)                           # slot labels
     slot_style.apply(drawio.Style(fillColor='none', strokeColor='none', fontSize=7))
-    shape_style = drawio.Style(rotation=90)                         # module graphics/shapes
+    # Module shapes are normally horizontal, so the vertical ones need a rotation
+    shape_h_style = drawio.Style(aspect='variable', imageAspect=False)                                  # horizontal module graphics/shapes
+    shape_v_style = drawio.Style(rotation=90, aspect='variable', imageAspect=False)                       # vertical module graphics/shapes
 
-    for slot_index in range(1, SLOT_COUNT + 1):
-        module = crate.slot(slot_index)
-        pos_x = START_X + slot_index * SLOT_WIDTH
-        pos_y = START_Y
+    # Get crate & module data
+    crate = make_crate(crate)
 
-        if module is None:
-            # Empty slot
-            generator.add_box(pos_x, pos_y, SLOT_WIDTH, SLOT_HEIGHT, style=box_style)
+    generator.clear_page(PAGE_WIDTH, PAGE_HEIGHT)
+    scale_hor = PAGE_WIDTH / crate.width
+    scale_ver = (PAGE_HEIGHT - TITLE_HEIGHT) / crate.height
+    scale = min(scale_hor, scale_ver)
 
+    START_X = (PAGE_WIDTH - crate.width * scale) / 2  # center the crate layout
+    START_Y = TITLE_HEIGHT  # draw the crate layout right below the title
+
+    # Crate name label
+    generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.name.upper())
+
+    # Draw the crate outline
+    generator.add_box(START_X, START_Y, crate.width * scale, crate.height * scale)
+
+    # Draw shapes/boxes representing the modules in each slot
+    for module in crate.modules:
+        if module.width is None or module.height is None or module.depth is None:
+            logger.warning('No layout data for module %s', module.position)
+            continue
+
+        width = (module.width.length + 1) * crate.x_slot_size * scale
+        height = (module.height.length + 1) * crate.y_slot_size * scale
+        pos_x = START_X + module.width.start * crate.x_slot_size * scale - width / 2
+        pos_y = START_Y + module.height.start * crate.y_slot_size * scale - height / 2
+
+        if module.orientation == layout.Orientation.HORIZONTAL:
+            shape_style = shape_h_style
         else:
-            try:
-                link = shapelinks.mapping[module.typeCode]
-                generator.add_shape(link.libraryName, link.shapeName,
-                        pos_x + SHAPE_OFFSET_X, pos_y + SHAPE_OFFSET_Y, style=shape_style)
-            except KeyError:
-                # No shape available in the library
-                generator.add_box(pos_x, pos_y, SLOT_WIDTH, SLOT_HEIGHT,
-                        text=module.typeName, style=box_style)
+            shape_style = shape_v_style
+            (width, height) = (height, width)
+            # Adjust the position after rotating the module
+            # (to understand it better: rotate a shape in draw.io, while watching its X, Y position)
+            size_diff = (height - width) / 2
+            pos_x += size_diff
+            pos_x -= height / 2 # yes, height / 2! since all modules are normally horizontal, height is the actual module width
+            pos_y -= size_diff
+
+        try:
+            link = shapelinks.mapping[module.typeCode]
+
+            generator.add_shape(link.libraryName, link.shapeName,
+                    pos_x, pos_y, width=width, height=height, style=shape_style)
+        except KeyError:
+            # No shape available in the library
+            generator.add_box(pos_x, pos_y, width, height,
+                    text=module.typeName, style=shape_style)
 
         # Slot label
-        generator.add_box(pos_x, pos_y + SLOT_HEIGHT, SLOT_WIDTH, 30,
-                text=f'Slot {slot_index}', style=slot_style)
+        # TODO where to put them? it is not smart to always put them below the crate, not every crate has horizontal slots
+        # if module.slotNumber:
+        #     generator.add_box(pos_x, START_Y + crate.height * scale, crate.x_slot_size, 50,
+        #             text=f'{module.slotNumber}', style=slot_style)
 
     buffer = io.BytesIO(generator.as_string().encode('utf-8'))
     buffer.seek(0)
@@ -271,8 +264,8 @@ if __name__ == '__main__':
     #data = get_crate_layout_data('CVREC')
     #print(data)
 
-    crate = make_crate('cfc-774-cdv35')
-    pprint.pprint(crate)
+    #crate = make_crate('cfv-193-ascool')
+    #pprint.pprint(crate)
 
-    #graph = generate_graph('cfv-774-cdv03')
-    #print(graph.readlines())
+    graph = generate_graph('cfv-193-ascool')
+    print(graph.readlines())
