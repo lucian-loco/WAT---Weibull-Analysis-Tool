@@ -16,16 +16,9 @@ class Face(Enum):
 
 
 @dataclass
-class Coord:
-    x: float
-    y: float
-    z: float
-
-
-@dataclass
 class Slice:
-    start: float
-    end: float
+    start: int
+    end: int
 
 
     def __post_init__(self):
@@ -34,13 +27,16 @@ class Slice:
 
     @property
     def length(self):
-        return self.end - self.start
+        """ Returns length of the slice (in slots). """
+        return self.end - self.start + 1
 
 
     def intersects(self, value):
         return self.start <= value and value <= self.end
 
 
+    def __str__(self):
+        return f'{self.start}-{self.end}'
 
 
 @functools.lru_cache(32)

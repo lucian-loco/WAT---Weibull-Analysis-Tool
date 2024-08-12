@@ -195,14 +195,14 @@ def generate_graph(crate, face=layout.Face.FRONT):
     scale_ver = (PAGE_HEIGHT - TITLE_HEIGHT) / crate.height
     scale = min(scale_hor, scale_ver)
 
-    START_X = (PAGE_WIDTH - crate.width * scale) / 2  # center the crate layout
-    START_Y = TITLE_HEIGHT  # draw the crate layout right below the title
+    start_x = (PAGE_WIDTH - crate.width * scale) / 2  # center the crate layout
+    start_y = TITLE_HEIGHT  # draw the crate layout right below the title
 
     # Crate name label
     generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.name.upper())
 
     # Draw the crate outline
-    generator.add_box(START_X, START_Y, crate.width * scale, crate.height * scale)
+    generator.add_box(start_x, start_y, crate.width * scale, crate.height * scale)
 
     # Draw shapes/boxes representing the modules in each slot
     for module in crate.modules:
@@ -213,32 +213,45 @@ def generate_graph(crate, face=layout.Face.FRONT):
         if not crate.is_module_face(module, face):
             continue        # process modules visible only on the specified face (front/back)
 
-        width = (module.width.length + 1) * crate.x_slot_size * scale
-        height = (module.height.length + 1) * crate.y_slot_size * scale
-        pos_x = START_X + module.width.start * crate.x_slot_size * scale - width / 2
-        pos_y = START_Y + module.height.start * crate.y_slot_size * scale - height / 2
 
+        # Calculate the shape box coordinates
+        scaled_width = module.width.length * crate.x_slot_size * scale
+        scaled_height = module.height.length * crate.y_slot_size * scale
+
+        pos_x = start_x + (module.width.start - 1) * crate.x_slot_size * scale
+
+        # For the back face, use mirror transformation (revert X position)
+        if face == layout.Face.BACK:
+            pos_x = PAGE_WIDTH - pos_x - scaled_width
+
+        # In LayoutDB Y=0 is at the bottom, in Draw.io Y=0 is at the top, so revert the Y position
+        pos_y = start_y + (crate.heightSlots - module.height.end) * crate.y_slot_size * scale
+
+
+        # Handle rotation of the module
         if module.orientation == layout.Orientation.HORIZONTAL:
             shape_style = shape_h_style
         else:
             shape_style = shape_v_style
-            (width, height) = (height, width)
+            (scaled_width, scaled_height) = (scaled_height, scaled_width)
             # Adjust the position after rotating the module
             # (to understand it better: rotate a shape in draw.io, while watching its X, Y position)
-            size_diff = (height - width) / 2
+            size_diff = (scaled_height - scaled_width) / 2
             pos_x += size_diff
-            pos_x -= height / 2 # yes, height / 2! since all modules are normally horizontal, height is the actual module width
             pos_y -= size_diff
 
+
+        # Find appropriate graphics or create an empty box with a description
         try:
             link = shapelinks.mapping[module.typeCode]
 
             generator.add_shape(link.libraryName, link.shapeName,
-                    pos_x, pos_y, width=width, height=height, style=shape_style)
+                    pos_x, pos_y, width=scaled_width, height=scaled_height, style=shape_style)
         except KeyError:
             # No shape available in the library
-            generator.add_box(pos_x, pos_y, width, height,
+            generator.add_box(pos_x, pos_y, scaled_width, scaled_height,
                     text=module.typeName, style=shape_style)
+
 
         # Slot label
         # TODO where to put them? it is not smart to always put them below the crate, not every crate has horizontal slots
@@ -271,4 +284,4 @@ if __name__ == '__main__':
     #pprint.pprint(crate)
 
     graph = generate_graph('cfv-193-ascool')
-    print(graph.readlines())
+    #print(graph.readlines())
