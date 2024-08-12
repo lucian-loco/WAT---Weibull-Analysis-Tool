@@ -194,7 +194,7 @@ def generate_graph(crate, face=layout.Face.FRONT):
     generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.name.upper())
 
     # Draw the crate outline
-    generator.add_box(start_x, start_y, crate.width * scale, crate.height * scale)
+    generator.add_box(start_x, start_y, crate.width * scale, crate.height * scale, style=crate_outline_style)
 
     # Draw shapes/boxes representing the modules in each slot
     for module in crate.modules:
