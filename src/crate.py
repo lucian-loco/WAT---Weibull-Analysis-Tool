@@ -5,8 +5,8 @@ import layout
 import io
 import glob
 import os
-import copy
 import drawio
+from drawio_styles import *
 import shapelinks
 
 import logging
@@ -178,14 +178,6 @@ def make_crate(crate):
 
 def generate_graph(crate, face=layout.Face.FRONT):
     logger.debug('Generating graph for %s', crate)
-
-    # Styles applied to the generated shapes
-    box_style = drawio.Style(horizontal=False, direction='west')    # slot boxes (when missing graphics)
-    slot_style = copy.deepcopy(box_style)                           # slot labels
-    slot_style.apply(drawio.Style(fillColor='none', strokeColor='none', fontSize=7))
-    # Module shapes are normally horizontal, so the vertical ones need a rotation
-    shape_h_style = drawio.Style(aspect='variable', imageAspect=False)                                  # horizontal module graphics/shapes
-    shape_v_style = drawio.Style(rotation=90, aspect='variable', imageAspect=False)                       # vertical module graphics/shapes
 
     # Get crate & module data
     crate = make_crate(crate)
