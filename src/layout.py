@@ -50,6 +50,10 @@ class Slice:
 
 @functools.lru_cache(32)
 def get_crate(equipment_code):
+    if equipment_code.startswith('HC'):
+        # Strip the 'HC' prefix
+        equipment_code = equipment_code[2:]
+
     cursor = db_hitdata.get_cursor()
     query = f"SELECT WIDTH, HEIGHT, DEPTH, WIDTH_DIM, HEIGHT_DIM, DEPTH_DIM " \
                 "FROM crate_dimensions_v WHERE EQUIPMENT_CODE = :equipment_code"

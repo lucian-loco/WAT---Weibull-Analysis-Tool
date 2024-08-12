@@ -121,11 +121,6 @@ class Crate:
 
 def make_crate(crate):
     crate_ccde_data = ccda.crate_by_label(crate)
-
-    # Remove 'HC' prefix from the equipment code
-    assert(crate_ccde_data['typeCode'].startswith('HC'))
-    crate_ccde_data['typeCode'] = crate_ccde_data['typeCode'][2:]
-
     crate_layout_data = layout.get_crate(crate_ccde_data['typeCode'])
 
     crate = Crate(
@@ -146,10 +141,6 @@ def make_crate(crate):
             modules      = [])
 
     for module_ccde_data in crate_ccde_data['modules']:
-        # Remove 'HC' prefix from the equipment code
-        assert(module_ccde_data['typeCode'].startswith('HC'))
-        module_ccde_data['typeCode'] = module_ccde_data['typeCode'][2:]
-
         module = Module(
             position   = module_ccde_data['name'],
             typeName   = module_ccde_data['typeName'],

@@ -9,15 +9,16 @@ class ShapeLink:
 # Map module type name to a Draw.IO shape from a template library
 mapping = {
     # Modules VME
-    'CTRV_': ShapeLink('Modules VME', 'CTRV'),
-    'CVBWA': ShapeLink('Modules VME', 'WR2RF'),
-    'CVOIA': ShapeLink('Modules VME', 'VD80'),
-    'CVOPE': ShapeLink('Modules VME', 'SIS3300'),
-    'CVORA': ShapeLink('Modules VME', 'CVORA'),
-    'CVORI': ShapeLink('Modules VME', 'CVORI'),
-    'CVUNB': ShapeLink('Modules VME', 'CPU MEN A20'),
-    'CVUNC': ShapeLink('Modules VME', 'CPU MEN A25'),
-    'CTDAP': ShapeLink('Modules VME', 'Conv-TTL-RS485'),
-    'CVORL': ShapeLink('Modules VME', 'CTLEI'),
+    'HCCTRV_': ShapeLink('Modules VME', 'CTRV'),
+    'HCCVBWA': ShapeLink('Modules VME', 'WR2RF'),
+    'HCCVOIA': ShapeLink('Modules VME', 'VD80'),
+    'HCCVOPE': ShapeLink('Modules VME', 'SIS3300'),
+    'HCCVORA': ShapeLink('Modules VME', 'CVORA'),
+    'HCCVORI': ShapeLink('Modules VME', 'CVORI'),
+    'HCCVUNB': ShapeLink('Modules VME', 'CPU MEN A20'),
+    'HCCVUNC': ShapeLink('Modules VME', 'CPU MEN A25'),
+    'HCCTDAP': ShapeLink('Modules VME', 'Conv-TTL-RS485'),
+    'HCCVORL': ShapeLink('Modules VME', 'CTLEI'),
+    'HCCVOTB': ShapeLink('Modules VME', 'CVOTB/FMC SVEC'),
     #'': ShapeLink('Modules VME', 'VMOD'),
 }
