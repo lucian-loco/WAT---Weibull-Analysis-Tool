@@ -14,6 +14,15 @@ class Face(Enum):
     FRONT = 1
     BACK = 2
 
+    @staticmethod
+    def from_str(value):
+        if value.lower() == 'front':
+            return Face.FRONT
+        elif value.lower() == 'back':
+            return Face.BACK
+        else:
+            raise ValueError(f'Invalid face value: {value}')
+
 
 @dataclass
 class Slice:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import weibull
 import crate
+import layout
 import os
 import urllib.parse
 import functools
@@ -57,7 +58,8 @@ def route_crate_new():
 def route_crate_edit():
     try:
         crate_name = request.args.get('name')
-        graph = crate.generate_graph(crate_name)
+        face = layout.Face.from_str(request.args.get('face', 'front'))
+        graph = crate.generate_graph(crate_name, face)
         drawio_libs = get_drawio_lib_urls()
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
@@ -70,7 +72,8 @@ def route_crate_edit():
 def route_crate_get():
     try:
         crate_name = request.args.get('name')
-        graph = crate.generate_graph(crate_name)
+        face = layout.Face.from_str(request.args.get('face', 'front'))
+        graph = crate.generate_graph(crate_name, face)
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
