@@ -120,9 +120,15 @@ class StyleAttrColor(StyleAttrAbstract):
         super(StyleAttrColor, self).__init__(name)
 
     def set(self, value):
+        if not value:
+            raise RuntimeError('Invalid color value')
+
         value = str(value).lower()
 
         if value[0] == "#":      #RRGGBB color code
+            if len(value) <= 1 or len(value) > 7:
+                raise RuntimeError('Invalid color code')
+
             for c in value[1:]:
                 if c not in '0123456789abcdef':
                     raise RuntimeError('Invalid color code')
