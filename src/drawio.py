@@ -140,6 +140,7 @@ class StyleAttrColor(StyleAttrAbstract):
 
 
 class Style:
+    # Valid draw.io style attributes and their types
     __valid_attributes = {
         'align': StyleAttrEnum('align', ('left', 'center', 'right')),
         'aspect': StyleAttrEnum('aspect', ('fixed', 'variable')),
@@ -156,6 +157,7 @@ class Style:
         'rounded': StyleAttrBool('rounded'),
         'shape': StyleAttrEnum('shape', ('image',)),
         'strokeColor': StyleAttrColor('strokeColor'),
+        'strokeWidth': StyleAttrInt('strokeWidth'),
         'text': StyleAttrFlag('text'),
         'verticalAlign': StyleAttrEnum('verticalAlign', ('top', 'middle', 'bottom')),
         'verticalLabelPosition': StyleAttrEnum('verticalLabelPosition', ('top', 'middle', 'bottom')),
