@@ -151,9 +151,10 @@ class SwitchSNMP:
             raise ConnectionError
 
         # Response formatting
-        if response.snmp_type in ('TICKS', 'INTEGER', 'Counter64'):
+        snmp_type = response.snmp_type.lower()
+        if snmp_type in ('ticks', 'integer', 'counter64'):
             return int(response.value)
-        elif response.snmp_type == 'OCTETSTR':
+        elif snmp_type == 'octetstr':
             hex_values = ['{0:02x}'.format(ord(c)) for c in response.value]
             return ''.join(hex_values)
 
