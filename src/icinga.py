@@ -1,6 +1,80 @@
 #!/usr/bin/env python
 import requests
 import json
+import re
+from dataclasses import dataclass
+
+
+# Regex to process performance data in Nagios format
+# see https://nagios-plugins.org/doc/guidelines.html:w
+# Example: 'label'=value[UOM];[warn];[crit];[min];[max]
+_metric_regex = re.compile(r"""
+(?:'([^']*)'|(\S+))   # label: in single quotes or without quotes
+=([-0-9.]+|U)         # value: int/float or 'U' (unknown)
+([^\d;']*)            # unit of measurement: cannot include digits, semicolons, or quotes
+(?:;([-0-9.:@~]*)     # warn: int/float or empty
+(?:;([-0-9.:@~]*))?   # crit: int/float or empty
+(?:;([-0-9.:@~]*))?   # min: int/float or empry
+(?:;([-0-9.:@~]*))?)? # max: int/float or empty
+""", re.VERBOSE)
+
+
+@dataclass
+class Metric:
+    """
+    Represents performance data for a specific metric.
+    Attributes:
+        label (str): The label of the performance data.
+        value (int | float | None): The value of the performance data.
+        uom (str | None): The unit of measurement for the performance data.
+        warn (int | float | None): The warning threshold for the performance data.
+        crit (int | float | None): The critical threshold for the performance data.
+        min (int | float | None): The minimum value for the performance data.
+        max (int | float | None): The maximum value for the performance data.
+    Methods:
+        from_str(input_str): Creates a Metric object from a string representation.
+    """
+    label: str
+    value: int | float | None
+    uom: str | None
+    warn: int | float | None
+    crit: int | float | None
+    min: int | float | None
+    max: int | float | None
+
+    @staticmethod
+    def _typed_value(val):
+        try:
+            return int(val)
+        except:
+            pass
+
+        try:
+            return float(val)
+        except:
+            pass
+
+        return None
+
+    @staticmethod
+    def from_str(input_str):
+        matches = _metric_regex.findall(input_str)
+
+        if len(matches) != 1:   # there should be only one match
+            return None
+
+        match = matches[0]
+
+        label = match[0] if match[0] else match[1]
+        value = Metric._typed_value(match[2])
+        uom = match[3] if match[3] else None
+        warn = Metric._typed_value(match[4])
+        crit = Metric._typed_value(match[5])
+        min = Metric._typed_value(match[6])
+        max = Metric._typed_value(match[7])
+
+        return Metric(label, value, uom, warn, crit, min, max)
+
 
 # TODO Python 3.10 does not have StrEnum
 class ObjectType:
@@ -200,6 +274,20 @@ class IcingaAPI:
             raise RuntimeError(f'HTTP status code {response.status_code}')
 
         return response.json()['results']
+
+
+    @staticmethod
+    def parse_performance_data(perf_data):
+        """
+        Parses performance data from a list returned by execute_query().
+
+        Args:
+            perf_data (list): The performance data list to parse.
+
+        Returns:
+            list: A list of Metric objects representing the performance data.
+        """
+        return [Metric.from_str(metric) for metric in perf_data]
 
 
     def get_host(self, host):
