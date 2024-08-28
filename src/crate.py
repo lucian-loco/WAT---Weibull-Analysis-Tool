@@ -109,11 +109,11 @@ class Crate:
 
     def x_slot_to_coord(self, slot):
         return slot * self.x_slot_size
-    
+
 
     def y_slot_to_coord(self, slot):
         return slot * self.y_slot_size
-    
+
 
     def z_slot_to_coord(self, slot):
         return slot * self.z_slot_size
@@ -155,7 +155,7 @@ def make_crate(crate):
             module.depth      = module_layout_data['depth']
 
             if module_ccde_data['slotNumber'] != module_layout_data['slot_number']:
-                logger.warning('Slot number mismatch for {0} (CCDE:{1} / Layout:{2})',
+                logger.warning('Slot number mismatch for %s (CCDE:%s / Layout:%s)',
                                     module_ccde_data['name'],
                                     module_ccde_data['slotNumber'],
                                     module_layout_data['slot_number'])
