@@ -11,6 +11,13 @@ _db_handle = None
 def get_cursor():
     global _db_handle
 
+    # Check if the connection is still valid
+    try:
+        if _db_handle:
+            _db_handle.ping()
+    except oracledb.DatabaseError:
+        _db_handle = None
+
     if _db_handle is None or not _db_handle.is_healthy():
         conn_params = {
             'user':         os.environ['DB_USER'],
