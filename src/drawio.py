@@ -307,7 +307,7 @@ class Shape:
 
 class Library:
     def __init__(self, filename):
-        """Loads all shapes from a template library"""
+        """ Loads all shapes from a template library. """
         self._shapes = {}
 
         with open(filename, 'r') as file:
@@ -325,7 +325,13 @@ class Library:
 
 
     def has_shape(self, name):
+        """ Returns True if the library contains a shape with the given name. """
         return name in self._shapes.keys()
+
+
+    def shapes(self):
+        """ Returns a list of all shape names in the library. """
+        return self._shapes.keys()
 
 
     def _make_style(self, name):
@@ -365,7 +371,13 @@ class Library:
 
 class Generator:
     def __init__(self):
+        # Dictionary of libraries (keys are library names, values are Library objects)
         self._libraries = {}
+
+        # Maps shape names to their corresponding libraries
+        # (note that multiple libraries can have shapes with the same name)
+        self._shape_map = {}
+
         self.clear_page(800, 600)
 
 
@@ -389,14 +401,31 @@ class Generator:
 
 
     def load_library(self, filename):
-        name = os.path.splitext(os.path.basename(filename))[0]  # extract the base file name (without extension)
-        assert(name not in self._libraries.keys())
-        self._libraries[name] = Library(filename)
+        # Extract the base file name (without extension) and use it as the library name
+        library_name = os.path.splitext(os.path.basename(filename))[0]
+        assert(library_name not in self._libraries.keys())
+
+        self._libraries[library_name] = Library(filename)
+
+        # Add all shapes from the library to the shape map
+        for shape_name in self._libraries[library_name].shapes():
+            if shape_name not in self._shape_map:
+                self._shape_map[shape_name] = []
+
+            self._shape_map[shape_name].append(library_name)
 
 
     def get_shape(self, library_name, shape_name):
         library = self._libraries[library_name]
         return library._shapes[shape_name]
+
+
+    def find_shape_library(self, shape_name):
+        """ Returns a list of libraries containing shape with the requested name. """
+        try:
+            return self._shape_map[shape_name]
+        except KeyError:
+            return []
 
 
     def add_shape(self, library_name, shape_name, x, y, width=None, height=None, style=None):
