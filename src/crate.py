@@ -210,12 +210,40 @@ def generate_graph(crate, face=layout.Face.FRONT):
         pos_y = start_y + (crate.heightSlots - module.height.end) * crate.y_slot_size * scale
 
 
+        # Find the appropriate shape, if available
+        library_name = generator.find_shape_library(module.typeCode)
+
+        # Determine the shape orientation
+        try:
+            shape = generator.get_shape(library_name[0], module.typeCode)
+            shape_horizontal = shape.is_horizontal
+        except (KeyError, IndexError) as e:
+            # No shape available, there will be a box with description
+            shape_horizontal = True
+
+        # Determine the module orientation (in LayoutDB)
+        module_horizontal = (module.orientation == layout.Orientation.HORIZONTAL)
+
+
         # Handle rotation of the module
-        if module.orientation == layout.Orientation.HORIZONTAL:
-            shape_style = shape_h_style
+        if module_horizontal:
+            if shape_horizontal:
+                shape_style = shape_h_style
+                rotate = False
+            else:
+                shape_style = shape_v_style
+                rotate = True
         else:
-            shape_style = shape_v_style
+            if shape_horizontal:
+                shape_style = shape_v_style
+                rotate = True
+            else:
+                shape_style = shape_h_style
+                rotate = False
+
+        if rotate:
             (scaled_width, scaled_height) = (scaled_height, scaled_width)
+
             # Adjust the position after rotating the module
             # (to understand it better: rotate a shape in draw.io, while watching its X, Y position)
             size_diff = (scaled_height - scaled_width) / 2
@@ -223,10 +251,8 @@ def generate_graph(crate, face=layout.Face.FRONT):
             pos_y -= size_diff
 
 
-        # Find appropriate graphics or create an empty box with a description
-        library_name = generator.find_shape_library(module.typeCode)
-
         if len(library_name) > 0:
+            # Shape found in the library, use it
             generator.add_shape(library_name[0], module.typeCode,
                     pos_x, pos_y, width=scaled_width, height=scaled_height, style=shape_style)
         else:
@@ -235,12 +261,7 @@ def generate_graph(crate, face=layout.Face.FRONT):
                     text=module.typeName, style=shape_style)
 
 
-        # Slot label
-        # TODO where to put them? it is not smart to always put them below the crate, not every crate has horizontal slots
-        # if module.slotNumber:
-        #     generator.add_box(pos_x, START_Y + crate.height * scale, crate.x_slot_size, 50,
-        #             text=f'{module.slotNumber}', style=slot_style)
-
+    # Create a buffer which can be returned by flask
     buffer = io.BytesIO(generator.as_string().encode('utf-8'))
     buffer.seek(0)
     return buffer
