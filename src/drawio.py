@@ -273,6 +273,16 @@ class Shape:
             raise RuntimeError('No graphic data in Shape')
 
 
+    @property
+    def is_horizontal(self):
+        return self.width > self.height
+
+
+    @property
+    def is_vertical(self):
+        return self.width < self.height
+
+
     @staticmethod
     def _xml_style(shape_dict):
         xml_raw_data = html.unescape(shape_dict['xml'])
