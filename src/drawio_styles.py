@@ -1,31 +1,31 @@
 #/usr/bin/env python
-import drawio
+from drawio import Style
 
 # Common styles applied to the generated shapes
 # Crate outline
-crate_outline_style = drawio.Style(
+crate_outline = Style(
     fillColor='none',
     strokeColor='black',
     strokeWidth=1)
 
 # Slot boxes (when missing shape graphics)
-box_style = drawio.Style(
+box = Style(
     fillColor='#dddddd',
     horizontal=False,
     direction='west')
 
 # Slot number labels
-slot_style = box_style.copy()
-slot_style.fillColor.set('none')
-slot_style.strokeColor.set('none')
-slot_style.fontSize.set(7)
+slot = box.copy()
+slot.fillColor.set('none')
+slot.strokeColor.set('none')
+slot.fontSize.set(7)
 
 # Horizontal module shapes
-shape_h_style = drawio.Style(
+shape_h = Style(
     aspect='variable',
     imageAspect=False)
 
 # Vertical module shapes (differ only by the rotation;
 # shapes in the library are normally horizontal, so we need to rotate them to make them vertical)
-shape_v_style = shape_h_style.copy()
-shape_v_style.rotation.set(90)
+shape_v = shape_h.copy()
+shape_v.rotation.set(90)
