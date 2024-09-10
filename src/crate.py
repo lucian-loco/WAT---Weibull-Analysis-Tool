@@ -7,7 +7,6 @@ import glob
 import os
 import drawio
 from drawio_styles import *
-import shapelinks
 
 import logging
 logger = logging.getLogger(__name__)
@@ -225,13 +224,13 @@ def generate_graph(crate, face=layout.Face.FRONT):
 
 
         # Find appropriate graphics or create an empty box with a description
-        try:
-            link = shapelinks.mapping[module.typeCode]
+        library_name = generator.find_shape_library(module.typeCode)
 
-            generator.add_shape(link.libraryName, link.shapeName,
+        if len(library_name) > 0:
+            generator.add_shape(library_name[0], module.typeCode,
                     pos_x, pos_y, width=scaled_width, height=scaled_height, style=shape_style)
-        except KeyError:
-            # No shape available in the library
+        else:
+            # No shape available in the library, create a simple box with a description instead
             generator.add_box(pos_x, pos_y, scaled_width, scaled_height,
                     text=module.typeName, style=shape_style)
 
