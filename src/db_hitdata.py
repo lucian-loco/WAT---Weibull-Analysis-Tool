@@ -18,7 +18,8 @@ __pool = oracledb.create_pool(
     port=os.environ['DB_PORT'],
     service_name=os.environ['DB_SERV'],
     min=__pool_size,
-    max=__pool_size
+    max=__pool_size,
+    increment=0
 )
 
 logger.info('Created HIT database connection pool (size=%d)', __pool_size)
