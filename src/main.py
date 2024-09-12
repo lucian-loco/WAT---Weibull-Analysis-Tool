@@ -15,14 +15,18 @@ app = Flask(__name__)
 def get_drawio_lib_urls():
     """ Generate a list of draw.io libraries URL, encoded for use in draw.io editor """
     drawio_lib_urls = []
-    drawio_lib_path = 'static/drawio'
-    base_url = url_for('static', filename=f'drawio', _external=True)
 
-    for filename in os.listdir(drawio_lib_path):
-        if os.path.isfile(os.path.join(drawio_lib_path, filename)):
-            url = f'{base_url}/{filename}'
-            encoded = urllib.parse.quote(url, safe='')
-            drawio_lib_urls.append(encoded)
+    try:
+        drawio_lib_path = 'drawio'
+        base_url = os.environ['DRAWIO_LIBS_URL']
+
+        for filename in os.listdir(drawio_lib_path):
+            if os.path.isfile(os.path.join(drawio_lib_path, filename)):
+                url = f'{base_url}/{filename}'
+                encoded = urllib.parse.quote(url, safe='')
+                drawio_lib_urls.append(encoded)
+    except:
+        pass    # no draw.io libraries, it is a pity, but not a showstopper
 
     return drawio_lib_urls
 
