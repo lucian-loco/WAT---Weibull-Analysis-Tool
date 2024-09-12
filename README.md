@@ -19,6 +19,22 @@ Parameters:
 
 Returns an image presenting a Weibull probability plot for the requested part.
 
+### crate/new
+
+Parameters: (none)
+
+Opens draw.io editor with a blank diagram. Preloads HIT draw.io shape libraries (from HIT project on cernbox).
+
+### crate/edit
+
+Parameters:
+* name - name of the crate to be shown
+* face - (optional) selects the side of the crate to be shown ('front' or 'back')
+
+Opens draw.io editor with a diagram showing modules installed in a specific crate. Preloads HIT draw.io shape libraries (from HIT project on cernbox).
+The diagram is drawn using data from CCDE (installed modules) and LayoutDB (modules positioning).
+
+
 ## Development
 
 This project is currently deployed in the [CERN OpenShift](https://paas.cern.ch) instance (`hit-data` project) and can be accessed via https://hit-data.app.cern.ch.
@@ -39,7 +55,10 @@ and pass the credentials using the following environmental variables:
 * EOS_USER: user
 * EOS_PASS: password
 
-When the project is running in an Openshift instance, you should use 'Secrets' mechanism to assign values to set the environmental variables.
+Draw.io editor tries to preload shape libraries from a location specified by an environmental variable:
+* DRAWIO_LIBS_URL: URL providing access to the shape libraries (in form of "https://xxx/yyy"). Currently set to the public directory in HIT project cernbox.
+
+When the project is running in an Openshift instance, you should use either 'Secrets' or 'ConfigMaps' mechanism to assign values to set these environmental variables.
 
 ### Python script
 
