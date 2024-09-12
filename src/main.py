@@ -56,15 +56,19 @@ def route_crate_new():
 
 @app.route('/crate/edit', methods=['GET'])
 def route_crate_edit():
+    crate_name = request.args.get('name')
+    drawio_libs = get_drawio_lib_urls()
+
+    if not crate_name:
+        return render_template('drawio.html', drawio_libs=drawio_libs)
+
     try:
-        crate_name = request.args.get('name')
         face = layout.Face.from_str(request.args.get('face', 'front'))
         graph = crate.generate_graph(crate_name, face)
-        drawio_libs = get_drawio_lib_urls()
+        document = graph.getvalue().decode('utf-8')
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
-    document = graph.getvalue().decode('utf-8')
     return render_template('drawio.html', document_data=document, drawio_libs=drawio_libs)
 
 
