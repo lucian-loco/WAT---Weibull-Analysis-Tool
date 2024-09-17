@@ -19,7 +19,8 @@ __pool = oracledb.create_pool(
     service_name=os.environ['DB_SERV'],
     min=__pool_size,
     max=__pool_size,
-    increment=0
+    increment=0,
+    timeout=5*60,   # idle connections are kept for 5 minutes
 )
 
 logger.info('Created HIT database connection pool (size=%d)', __pool_size)
