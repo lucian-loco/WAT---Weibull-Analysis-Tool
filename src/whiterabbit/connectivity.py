@@ -44,8 +44,11 @@ class Connectivity:
         return self._devices[name]
 
 
-    def get_port(self, name):
+    def get_port(self, name, create=False):
         if name not in self._ports:
+            if not create:
+                return None
+
             self._ports[name] = Port(name)
 
         return self._ports[name]
@@ -293,7 +296,7 @@ class ConnectivityDatabase(Connectivity):
             port_name = row["{0}_NAME".format(pfx)]
             port_label = row["{0}_LABEL".format(pfx)]
 
-            port = self.get_port(port_name)
+            port = self.get_port(port_name, True)
             port.label = port_label
             port.device = device_name
 
@@ -312,8 +315,8 @@ class ConnectivityDatabase(Connectivity):
                     logger.info("Skipping port '{0}' for device '{1}'".format(port_label, device_name))
 
         # Process fiber connection
-        port1 = self.get_port(row["PRIME_NAME"])
-        port2 = self.get_port(row["SECOND_NAME"])
+        port1 = self.get_port(row["PRIME_NAME"], True)
+        port2 = self.get_port(row["SECOND_NAME"], True)
         new_fiber = Fiber(port1, port2)
 
         if self._is_fiber_complete(new_fiber):
@@ -377,32 +380,44 @@ class ConnectivityDatabase(Connectivity):
         super(ConnectivityDatabase, self).process()
 
 
-class ConnectivityPTP(Connectivity):
-    """ Class generating connectivity information from SNMP/PTP (not LLDP). """
+class MAC(int):
+    """ Class representing a MAC address. """
+    def __new__(cls, mac, *args, **kwargs):
+        if isinstance(mac, str):
+            mac = MAC._sanitize_mac(mac)
+            mac = int(mac, 16)
+
+        return super(MAC, cls).__new__(cls, mac)
+
+
+    def __str__(self):
+        return '{0:012x}'.format(self)
+
+
+    @staticmethod
+    def _sanitize_mac(mac):
+        """ Removes colons and hyphens from the MAC address. """
+        sanitized = mac.replace(':', '').replace('-', '').lower()
+
+        if len(sanitized) != 12:
+            raise ValueError("Invalid MAC address")
+
+        return sanitized
+
+
+class ConnectivityMAC(Connectivity):
+    """ Class generating connectivity information basing on MAC addresses data. """
     def __init__(self, top_switch, all_connections=False):
-        super(ConnectivityPTP, self).__init__(top_switch, all_connections)
+        super(ConnectivityMAC, self).__init__(top_switch, all_connections)
 
 
-    def get_device(self, name):
-        # Nearly the same as Connectivity.get_device()
-        # but this one creates Switch objects instead of Device
-        name = name.lower()
-
-        if name not in self._devices:
-            self._devices[name] = Switch(name)
-
-        return self._devices[name]
-
-
-    def get_port_by_mac(self, mac):
-        try:
-            return self._ports[ConnectivityPTP._sanitize_mac(mac)]
-        except KeyError:
-            return None
+    def get_port(self, mac, create=False):
+        # use str version of MAC address to find ports, it is easier to read
+        return Connectivity.get_port(self, str(mac), create)
 
 
     def get_switch_by_mac(self, mac):
-        port = self.get_port_by_mac(mac)
+        port = self.get_port(mac)
 
         if port is None or not port.device:
             return None
@@ -425,47 +440,69 @@ class ConnectivityPTP(Connectivity):
                 logger.warning(f"Could not connect to {switch_name}")
 
 
+    def _get_mac1(self, switch):
+        """ Returns the MAC address of the first SFP port. """
+        raise NotImplementedError
+
+
+    def _get_peer_mac(self, switch, port):
+        """ Returns the MAC address of the peer connected to the switch port. """
+        raise NotImplementedError
+
+
+    def _port_range(self, switch):
+        """ Returns the number of SFP ports on the switch. """
+        raise NotImplementedError
+
+
     def _process_switch_ports(self, switch: Switch):
         # Get the MAC address of the first SFP port (remaining SFP ports have consecutive addresses)
-        mac1 = switch.snmp.sfp_port_mac(1)
-        # Convert the MAC address to an int, to easily compute other port MAC addresses
-        mac1_num = ConnectivityPTP._mac_to_int(mac1)
+        mac1 = self._get_mac1(switch)
+
+        if mac1 is None:
+            logger.warning(f"No MAC address found for {switch.name}, skipping")
+            return
 
         # Bind all MACs to the switch
-        for p in switch.snmp.sfp_port_range():
-            # Compute the port MAC address, store in hex format
-            mac_str = ConnectivityPTP._compute_mac(mac1_num, p)
+        for p in self._port_range(switch):
+            # Compute the port MAC address
+            mac = ConnectivityMAC._compute_mac(mac1, p)
 
             # Register the port, to create connections
-            assert(mac_str not in self._ports)  # Check for duplicates
-            new_port = self.get_port(mac_str)
+            if self.get_port(mac):
+                logger.warning(f"MAC {mac} already registered to {self.get_switch_by_mac(mac).name}, skipping {switch.name}")
+                return
+
+            new_port = self.get_port(mac, True)
             new_port.label = p             # Port number, indexed from 1
             new_port.device = switch.name
             switch.add_port(new_port)
-            logger.debug(f"MAC DB: {mac_str} -> {switch.name}")
+            logger.debug(f"MAC DB: {mac} -> {switch.name}")
 
 
     def _process_switch_connections(self, switch: Switch):
         logger.debug(f"Processing {switch.name}")
 
         # Get the first SFP port MAC address as an integer (to compute MAC addresses of the remaining ports)
-        my_mac1_num = ConnectivityPTP._mac_to_int(switch.snmp.sfp_port_mac(1))
+        my_mac1 = self._get_mac1(switch)
 
         # Check what is connected to each SFP port...
-        for p in switch.snmp.sfp_port_range():
-            peer_mac = switch.snmp.sfp_port_peer_mac(p)
+        for p in self._port_range(switch):
+            peer_mac = self._get_peer_mac(switch, p)
 
             if peer_mac == None:
                 continue        # nothing connected to the port
 
-            try:
-                my_mac = ConnectivityPTP._compute_mac(my_mac1_num, p)
-                my_port = self._ports[my_mac]
-                peer_port = self._ports[peer_mac]
-                self._add_fiber(Fiber(my_port, peer_port))
-                logger.debug(f"   {my_port} <-> {peer_port}")
-            except KeyError:
+            my_mac = ConnectivityMAC._compute_mac(my_mac1, p)
+            my_port = self.get_port(my_mac)
+            peer_port = self.get_port(peer_mac)
+
+            if peer_port is None:
                 logger.warning(f"Unknown MAC address {peer_mac} on {my_port}")
+                continue
+
+            self._add_fiber(Fiber(my_port, peer_port))
+            logger.debug(f"   {my_port} <-> {peer_port}")
 
 
     def process(self):
@@ -480,33 +517,55 @@ class ConnectivityPTP(Connectivity):
             except ConnectionError:
                 logger.warning(f"Could not process {s.name}")
 
-        super(ConnectivityPTP, self).process()
-
-
-    @staticmethod
-    def _sanitize_mac(mac):
-        """ Converts MAC address to the format used by the class. """
-        sanitized = mac.replace(':', '').replace('-', '').lower()
-        assert(len(sanitized) == 12)
-        return sanitized
-
-
-    @staticmethod
-    def _int_to_mac(mac_int):
-        """ Converts an integer to a string containing hexadecimal number representing a MAC address. """
-        return '{0:012x}'.format(mac_int)
-
-
-    @staticmethod
-    def _mac_to_int(mac_str):
-        """ Converts a string representing a MAC address in hexadecimal format to an integer. """
-        return int(mac_str, 16)
+        super(ConnectivityMAC, self).process()
 
 
     @staticmethod
     def _compute_mac(mac1_num, port_index):
         """ Calculates MAC address using first SFP port MAC address and the requested SFP port number (indexed from 1). """
-        return ConnectivityPTP._int_to_mac(mac1_num + port_index - 1)
+        return MAC(mac1_num + port_index - 1)
+
+
+class ConnectivityPTP(ConnectivityMAC):
+    """ Class generating connectivity information from Icinga (which is currently based on PTP/SNMP). """
+    def __init__(self, top_switch, all_connections=False):
+        super(ConnectivityPTP, self).__init__(top_switch, all_connections)
+
+
+    def get_device(self, name):
+        # Nearly the same as Connectivity.get_device()
+        # but this one creates Switch objects instead of Device
+        name = name.lower()
+
+        if name not in self._devices:
+            self._devices[name] = Switch(name)
+
+        return self._devices[name]
+
+
+    def _build_mac_db(self):
+        """ Scans all WR switches to build a MAC address database. """
+        for entry in ccda.wr_switches():
+            switch_name = entry["name"]
+
+            try:
+                switch = self.get_device(switch_name)
+                self._process_switch_ports(switch)
+            except ConnectionError:
+                logger.warning(f"Could not connect to {switch_name}")
+
+
+    def _get_mac1(self, switch):
+        """ Returns the MAC address of the first SFP port. """
+        return switch.snmp.sfp_port_mac(1)
+
+
+    def _get_peer_mac(self, switch, port):
+        return switch.snmp.sfp_port_peer_mac(port)
+
+
+    def _port_count(self, switch):
+        return switch.snmp.sfp_port_range()
 
 
 if __name__ == "__main__":
