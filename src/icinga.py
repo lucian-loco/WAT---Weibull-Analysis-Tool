@@ -332,9 +332,13 @@ if __name__ == '__main__':
     # Find all services with name WRSTemperatureService on hosts starting with ctdw-774-cins..
     # and show their host name and IP address (using joins)
     q = ObjectQuery(ObjectType.SERVICE, joins=['host.name', 'host.address'])
-    q.filter_equal('host.name', 'ctdw-774-cins4')
-    q.filter_match('service.name', '*')
+    q.filter_match('host.name', 'ctdw-774-cins*')
+    q.filter_equal('service.name', 'WRSTemperatureService')
     # Show only the following attributes
-    #q.add_attribute('last_check_result')
-    #q.add_attribute('active')
-    pprint.pprint(icinga.execute_query(q))
+    q.add_attribute('last_check_result')
+    q.add_attribute('active')
+    result = icinga.execute_query(q)
+    # Show full response
+    pprint.pprint(result)
+    # Parse performance data for the first service
+    pprint.pprint(IcingaAPI.parse_performance_data(result[0]['attrs']['last_check_result']['performance_data']))
