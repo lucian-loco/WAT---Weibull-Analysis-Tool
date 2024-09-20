@@ -17,12 +17,12 @@
     <script type="text/javascript" src="/static/scripts/vis-network.min.js"></script>
   </head>
   <body>
-  
+
     <div id="network"></div>
-  
+
     <script type="text/javascript">
       var container = document.getElementById('network');
-  
+
       var options = {
         nodes: {
           borderWidth: 1,
@@ -51,7 +51,7 @@
           //  enabled: true
           //}
         },
-  
+
         edges: {
           color: {
             color: '#0d6d0d',
@@ -62,15 +62,15 @@
             type: "cubicBezier",
             forceDirection: "vertical",
             roundness: 0.3,
-          }, 
+          },
         },
-  
+
         groups: {
           stateError: { color: { background: 'red' } },
           stateWarning: { color: { background: 'orange' } },
           stateOk: { color: { background: 'green' } },
         },
-  
+
         layout: {
           hierarchical: {
             direction: "UD",	// up-down
@@ -82,24 +82,24 @@
             //shakeTowards: "roots",
           },
         },
-        
+
         interaction: {
           dragNodes: false,
           hover: true,
           navigationButtons: true,
           multiselect: false,
         },
-  
+
         physics: false,
       };
-  
+
       var nodes = new vis.DataSet();
       const nodesView = new vis.DataView(nodes);
       var edges = new vis.DataSet();
       const edgesView = new vis.DataView(edges);
-  
+
       var network = new vis.Network(container, { nodes: nodesView, edges: edgesView }, options);
-  
+
       // Function to fetch data from another address
       function updateData() {
         fetch('/whiterabbit/connections/ptp')
@@ -108,17 +108,17 @@
             // Clear existing data
             nodes.clear();
             edges.clear();
-  
+
             // Add new nodes and edges
             nodes.add(data.nodes);
             edges.add(data.edges);
           })
           .catch(error => console.error('Error fetching data:', error));
       }
-  
+
       // Initial fetch and update
       updateData();
-  
+
       // Fetch and update every 5 seconds
       //setInterval(updateData, 5000);
     </script>
