@@ -1,8 +1,7 @@
 #!/usr/bin/python3
 import os
 
-# TODO change to the actual WR Grandmaster
-WR_GRANDMASTER = os.environ.get("WR_GRANDMASTER", "ctdwa-ccr-cgpnallm1")
+WR_GRANDMASTER = os.environ.get("WR_GRANDMASTER", "ctdw-ccr-ctnljm1")
 
 WR_CONN_REFRESH_RATE_PTP = int(os.environ.get("WR_CONN_REFRESH_RATE_PTP", 5 * 60))
 WR_CONN_OUTPUT_FILE_PTP = os.environ.get("WR_CONN_OUTPUT_FILE_PTP", "./data/connectivity_ptp.json")
