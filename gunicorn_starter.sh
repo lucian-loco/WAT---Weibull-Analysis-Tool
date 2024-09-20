@@ -21,6 +21,10 @@ if [ -z "$GUNICORN_LOG_LEVEL" ]; then
 fi
 
 
+# WR network connectivity data updater (running as a background task)
+python src/whiterabbit/updater.py &
+
+
 # TMP_DIR="$(mktemp -d)"
 TMP_DIR="/tmp/hit-data-cache"
 mkdir -p "$TMP_DIR"

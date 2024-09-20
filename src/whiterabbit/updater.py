@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 def update_ptp():
     while True:
         try:
-            logger.info("Updating connectivity data from PTP")
-            conn = connectivity.ConnectivityPTP(config.WR_GRANDMASTER, False)
+            logger.info("Updating connectivity data from PTP (via Icinga)")
+            conn = connectivity.ConnectivityIcinga(config.WR_GRANDMASTER, False)
             conn.process()
             conn.save_to_json(config.WR_CONN_OUTPUT_FILE_PTP)
         except Exception as e:
@@ -28,7 +28,7 @@ def update_layoutdb():
             conn.save_to_json(config.WR_CONN_OUTPUT_FILE_LAYOUTDB)
         except Exception as e:
             logger.error(f"Error in LayoutDB updater: {e}")
-    
+
         time.sleep(config.WR_CONN_REFRESH_RATE_LAYOUTDB)
 
 
