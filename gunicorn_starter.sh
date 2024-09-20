@@ -5,12 +5,11 @@ fi
 
 # Default gunicorn settings
 if [ -z "$GUNICORN_WORKERS" ]; then
-    GUNICORN_WORKERS=2
+    GUNICORN_WORKERS=1
 fi
 
-
 if [ -z "$GUNICORN_THREADS" ]; then
-    GUNICORN_THREADS=2
+    GUNICORN_THREADS=1
 fi
 
 if [ -z "$GUNICORN_TIMEOUT" ]; then
