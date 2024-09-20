@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from devices import Device
 from cache import *
 import ccda
+import icinga
 
 # TODO see what happens when a switch was off and now turned on, or reverse
 
@@ -248,7 +249,101 @@ class SwitchSNMP:
         return self._get_snmp(f'iso.3.6.1.4.1.96.100.7.8.1.26.{index}.1') == 1
 
 
+class SwitchIcinga(ExpiringCacheMixin):
+    # Icinga API connection (do not use directly, use _api() method)
+    __icinga_api_handle = None
+
+    def __init__(self, name):
+        super(SwitchIcinga, self).__init__(5 * 60)
+        self.name = name
+        self._data = None
+
+
+    @classmethod
+    def _api(cls):
+        """ Returns the Icinga API object. """
+        if cls.__icinga_api_handle is None:
+            user = os.environ['ICINGA_USER']
+            password = os.environ['ICINGA_PASS']
+            hostname = os.environ['ICINGA_HOST']
+            cls.__icinga_api_handle = icinga.IcingaAPI(user, password, hostname)
+
+        return cls.__icinga_api_handle
+
+
+    def _update_cache(self):
+        logger.debug(f'Updating Icinga cache for {self.name}')
+        self._data = {}
+
+        # Get all services data
+        q = icinga.ObjectQuery(icinga.ObjectType.SERVICE)
+        q.filter_equal('host.name', self.name)
+        q.filter_match('service.name', 'WRS*Service')
+        q.add_attribute('last_check_result')
+        result = SwitchIcinga._api().execute_query(q)
+
+        # result is an array of dictionaries, one for each service
+        for r in result:
+            if r['attrs']['last_check_result']['state'] == icinga.ServiceState.UNKNOWN:
+                logger.warning(f"Icinga service {r['name']} is in UNKNOWN state")
+                continue
+
+            service_name = r['name'].split('!')[1]
+            self._data[service_name] = icinga.IcingaAPI.parse_performance_data(r['attrs']['last_check_result']['performance_data'])
+
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def status(self):
+        """ Returns the general status. """
+        return self._data['WRSStatusService']
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def system(self):
+        """ Returns the operating system status. """
+        return self._data['WRSSystemService']
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def connectivity(self):
+        """ Returns the connectivity status. """
+        return self._data['WRSConnectivityService']
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def temperature(self):
+        """ Returns the temperature status. """
+        return self._data['WRSTemperatureService']
+
+    @property
+    @ExpiringCacheMixin.decorate(30*60)
+    def version(self):
+        """ Returns the version status. """
+        return self._data['WRSVersionService']
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def network(self):
+        """ Returns the network status. """
+        return self._data['WRSNetworkService']
+
+    @property
+    @ExpiringCacheMixin.decorate(4*60)
+    def timing(self):
+        """ Returns the timing status. """
+        return self._data['WRSTimingService']
+
+    @property
+    @ExpiringCacheMixin.decorate(60*60)
+    def lifetime(self):
+        """ Returns the lifetime status. """
+        return self._data['WRSLifeTimeService']
+
+
 class Switch(Device):
+    """ Represents a White Rabbit switch and provides access to its data. """
+
     def __init__(self, name):
         super(Switch, self).__init__(name)
         self.ccda = SwitchCCDA(name)
@@ -261,9 +356,12 @@ class Switch(Device):
         except easysnmp.exceptions.EasySNMPTimeoutError as e:
             raise ConnectionError from e
 
+        self.icinga = SwitchIcinga(name)
+
 
 if __name__ == "__main__":
     import time
+    import pprint
     logger.setLevel(logging.DEBUG)
     switch = Switch('ctdwa-774-cins3')
 
@@ -286,3 +384,8 @@ if __name__ == "__main__":
 
     for p in range(1, 19):
         print('SFP{0} peer MAC: {1}'.format(p, switch.snmp.sfp_port_peer_mac(p)))
+
+    # Icinga test
+    pprint.pprint(switch.icinga.connectivity)
+    pprint.pprint(switch.icinga.temperature)
+    pprint.pprint(switch.icinga.status)
