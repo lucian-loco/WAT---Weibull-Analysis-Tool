@@ -391,6 +391,9 @@ class MAC(int):
             mac = MAC._sanitize_mac(mac)
             mac = int(mac, 16)
 
+        if mac is None:
+            return None
+
         return super(MAC, cls).__new__(cls, mac)
 
 
@@ -430,6 +433,17 @@ class ConnectivityMAC(Connectivity):
             return self._devices[port.device]
         except KeyError:
             return None
+
+
+    def get_device(self, name):
+        # Nearly the same as Connectivity.get_device()
+        # but this one creates Switch objects instead of Device
+        name = name.lower()
+
+        if name not in self._devices:
+            self._devices[name] = Switch(name)
+
+        return self._devices[name]
 
 
     def _build_mac_db(self):
@@ -536,46 +550,64 @@ class ConnectivityPTP(ConnectivityMAC):
         super(ConnectivityPTP, self).__init__(top_switch, all_connections)
 
 
-    def get_device(self, name):
-        # Nearly the same as Connectivity.get_device()
-        # but this one creates Switch objects instead of Device
-        name = name.lower()
-
-        if name not in self._devices:
-            self._devices[name] = Switch(name)
-
-        return self._devices[name]
-
-
-    def _build_mac_db(self):
-        """ Scans all WR switches to build a MAC address database. """
-        for entry in ccda.wr_switches():
-            switch_name = entry["name"]
-
-            try:
-                switch = self.get_device(switch_name)
-                self._process_switch_ports(switch)
-            except ConnectionError:
-                logger.warning(f"Could not connect to {switch_name}")
-
-
     def _get_mac1(self, switch):
-        """ Returns the MAC address of the first SFP port. """
-        return switch.snmp.sfp_port_mac(1)
+        address = switch.snmp.sfp_port_mac(1)
+        return MAC(address)
 
 
     def _get_peer_mac(self, switch, port):
-        return switch.snmp.sfp_port_peer_mac(port)
+        address = switch.snmp.sfp_port_peer_mac(port)
+        return MAC(address)
 
 
-    def _port_count(self, switch):
+    def _port_range(self, switch):
         return switch.snmp.sfp_port_range()
+
+
+class ConnectivityIcinga(ConnectivityMAC):
+    """ Class generating connectivity information from Icinga (which is currently based on SNMP/PTP). """
+    def __init__(self, top_switch, all_connections=False):
+        super(ConnectivityIcinga, self).__init__(top_switch, all_connections)
+
+
+    @staticmethod
+    def _find_metric(metrics, name):
+        for m in metrics:
+            if m.label == name:
+                return m.value
+
+        return None
+
+
+    def _get_mac1(self, switch):
+        try:
+            mac = ConnectivityIcinga._find_metric(switch.icinga.connectivity, 'wrsMacSfp1')
+            return MAC(mac)
+        except KeyError:
+            return None
+
+
+    def _get_peer_mac(self, switch, port):
+        try:
+            mac = ConnectivityIcinga._find_metric(switch.icinga.connectivity, f'wrsPeerMacSfp{port}')
+
+            if mac == 0:    # 0 means nothing connected
+                return None
+
+            return MAC(mac)
+        except KeyError:
+            return None
+
+
+    def _port_range(self, switch):
+        # TODO do not hardcode
+        return range(1, 19)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generates WR connectivity information (JSON format)")
     
-    parser.add_argument("--source", "-s", choices=("layoutdb", "ptp", "csv"), required=True,
+    parser.add_argument("--source", "-s", choices=("layoutdb", "ptp", "csv", "icinga"), required=True,
             help="Data source.")
     parser.add_argument("--output", "-o", type=str, default="connectivity.json",
             help="Output file name.")
@@ -596,6 +628,8 @@ if __name__ == "__main__":
         conn = ConnectivityDatabase.from_csv(args.top_switch, "connections.csv", all_connections=args.all)
     elif args.source == "ptp":
         conn = ConnectivityPTP(args.top_switch, all_connections=args.all)
+    elif args.source == "icinga":
+        conn = ConnectivityIcinga(args.top_switch, all_connections=args.all)
 
     conn.process()
     # logger.info("Incomplete fibers: {0}".format(len(conn._incomplete_fibers)))
