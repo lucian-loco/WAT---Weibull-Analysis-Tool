@@ -94,9 +94,9 @@ def route_wr_main():
     return render_template('whiterabbit/main.html')
 
 
-@app.route('/whiterabbit/layout')
-def route_wr_layout():
-    return render_template('whiterabbit/layout.html')
+@app.route('/whiterabbit/network')
+def route_wr_network():
+    return render_template('whiterabbit/network.html')
 
 
 @app.route('/whiterabbit/switch', methods=['GET'])
@@ -106,7 +106,7 @@ def route_wr_switch():
 
 
 @app.route('/whiterabbit/connections/layoutdb')
-def route_wr_connections_layout():
+def route_wr_connections_layoutdb():
     return send_file('whiterabbit/data/connectivity_layoutdb.json')
 
 
