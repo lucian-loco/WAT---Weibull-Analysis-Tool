@@ -17,6 +17,10 @@ from devices import *
 logging.basicConfig(format='%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 
+import urllib3
+urllib3.disable_warnings()  # silences lots of warnings from CCDA/Icinga
+
+
 class Connectivity:
     def __init__(self, top_switch, all_connections=False):
         self._grandmaster = top_switch
