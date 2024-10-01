@@ -55,7 +55,7 @@ def get_crate(equipment_code):
         equipment_code = equipment_code[2:]
 
     cursor = db_hitdata.get_cursor()
-    query = f"SELECT WIDTH, HEIGHT, DEPTH, WIDTH_DIM, HEIGHT_DIM, DEPTH_DIM " \
+    query = "SELECT WIDTH, HEIGHT, DEPTH, WIDTH_DIM, HEIGHT_DIM, DEPTH_DIM " \
                 "FROM crate_dimensions_v WHERE EQUIPMENT_CODE = :equipment_code"
     response = cursor.execute(query, (equipment_code,)).fetchall()
 
@@ -74,8 +74,7 @@ def get_crate(equipment_code):
 
 def get_module(position):
     cursor = db_hitdata.get_cursor()
-    # TODO MODULE_DESCRIPTION? MODULE_EQUIPMENT_CODE?
-    query = f"SELECT SLOT_NUMBER, " \
+    query = "SELECT MODULE_NAME, SLOT_NUMBER, " \
             "H_START_NUM, H_END_NUM, " \
             "W_START_NUM, W_END_NUM, " \
             "D_START_NUM, D_END_NUM " \
@@ -86,8 +85,31 @@ def get_module(position):
         raise ValueError(f'Invalid module position: {position}')
 
     return {
-        'slot_number': response[0][0],
-        'height': Slice(response[0][1], response[0][2]),
-        'width': Slice(response[0][3], response[0][4]),
-        'depth': Slice(response[0][5], response[0][6]),
+        'name': response[0][0],
+        'slot_number': response[0][1],
+        'height': Slice(response[0][2], response[0][3]),
+        'width': Slice(response[0][4], response[0][5]),
+        'depth': Slice(response[0][6], response[0][7]),
     }
+
+
+def get_fec_modules(fec_name):
+    """ Returns a list of modules installed in a given FEC. """
+    cursor = db_hitdata.get_cursor()
+    query = "SELECT MODULE_NAME, SLOT_NUMBER, " \
+            "MODULE_DESCRIPTION, MODULE_EQUIPMENT_CODE, "\
+            "H_START_NUM, H_END_NUM, " \
+            "W_START_NUM, W_END_NUM, " \
+            "D_START_NUM, D_END_NUM " \
+            "FROM module_positions_v WHERE UPPER(FEC_NAME) = :fec_name"
+    response = cursor.execute(query, (fec_name.upper(),)).fetchall()
+
+    return [{
+        'name': row[0],
+        'slot_number': row[1],
+        'description': row[2],
+        'equipment_code': row[3],
+        'height': Slice(row[4], row[5]),
+        'width': Slice(row[6], row[7]),
+        'depth': Slice(row[8], row[9]),
+    } for row in response]
