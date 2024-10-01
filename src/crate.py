@@ -21,6 +21,7 @@ TITLE_HEIGHT = 20
 @dataclass
 class Module:
     position: str   # EAM position
+    description: str
     typeName: str
     typeCode: str
     slotNumber: int
@@ -118,8 +119,8 @@ class Crate:
         return slot * self.z_slot_size
 
 
-def make_crate(crate):
-    crate_ccde_data = ccda.crate_by_label(crate)
+def make_crate(fec_name):
+    crate_ccde_data = ccda.crate_by_label(fec_name)
     crate_layout_data = layout.get_crate(crate_ccde_data['typeCode'])
 
     crate = Crate(
@@ -139,27 +140,18 @@ def make_crate(crate):
 
             modules      = [])
 
-    for module_ccde_data in crate_ccde_data['modules']:
+    for module_layout_data in layout.get_fec_modules(fec_name):
+        # TODO fetch LUN/typeName from CCDA?
         module = Module(
-            position   = module_ccde_data['name'],
-            typeName   = module_ccde_data['typeName'],
-            typeCode   = module_ccde_data['typeCode'],
-            slotNumber = module_ccde_data['slotNumber'],
-            lun        = module_ccde_data['lun'])
-
-        try:
-            module_layout_data = layout.get_module(module_ccde_data['name'])
-            module.width      = module_layout_data['width']
-            module.height     = module_layout_data['height']
-            module.depth      = module_layout_data['depth']
-
-            if module_ccde_data['slotNumber'] != module_layout_data['slot_number']:
-                logger.warning('Slot number mismatch for %s (CCDE:%s / Layout:%s)',
-                                    module_ccde_data['name'],
-                                    module_ccde_data['slotNumber'],
-                                    module_layout_data['slot_number'])
-        except ValueError as e:
-            logger.warning('Could not find module layout data for %s', module_ccde_data['name'])
+            position    = module_layout_data['name'],
+            description = module_layout_data['description'],
+            typeName    = None,
+            typeCode    = 'HC' + module_layout_data['equipment_code'],
+            slotNumber  = module_layout_data['slot_number'],
+            lun         = None,
+            width       = module_layout_data['width'],
+            height      = module_layout_data['height'],
+            depth       = module_layout_data['depth'])
 
         crate.modules.append(module)
 
@@ -258,7 +250,7 @@ def generate_graph(crate, face=layout.Face.FRONT):
         else:
             # No shape available in the library, create a simple box with a description instead
             generator.add_box(pos_x, pos_y, scaled_width, scaled_height,
-                    text=module.typeName, style=shape_style)
+                    text=module.description, style=shape_style)
 
 
     # Create a buffer which can be returned by flask
@@ -283,8 +275,8 @@ if __name__ == '__main__':
     #data = get_crate_layout_data('CVREC')
     #print(data)
 
-    #crate = make_crate('cfv-193-ascool')
-    #pprint.pprint(crate)
+    crate = make_crate('cfv-774-caos4')
+    pprint.pprint(crate)
 
-    graph = generate_graph('cfv-193-ascool')
+    #graph = generate_graph('cfv-193-ascool')
     #print(graph.readlines())
