@@ -87,8 +87,38 @@ class CacheSNMP(ExpiringCacheMixin):
                 self._cache[k] = None
 
 
+class CacheLLDP(ExpiringCacheMixin):
+    """
+      Caches the LLDP data to prevent too frequent SNMP queries.
+      The values are updated every cache_timeout seconds.
+      One cannot use the standard CacheSNMP class, because processing LLDP data requires
+      an SNMP walk (OIDs are not fixed/known in advance).
+    """
+    def __init__(self, session, cache_timeout):
+        super(CacheLLDP, self).__init__(cache_timeout)
+        self._session = session
+        self._cache = {}
+
+    @ExpiringCacheMixin.decorate()
+    def get(self, port):
+        return self._cache.get(port, None)
+
+    def _update_cache(self):
+        logger.debug(f'Updating SNMP cache for {self._session.hostname}')
+
+        self._cache = {}
+        lldp_connections = self._session.walk('.1.0.8802.1.1.2.1.4.1.1.7')
+
+        for item in lldp_connections:
+            assert(item.snmp_type == 'OCTETSTR')
+            port = int(item.oid.split('.')[-2]) - 2
+            peer_mac = ''.join([f'{ord(x):02x}' for x in item.value])
+            assert(port not in self._cache)
+            self._cache[port] = peer_mac
+
+
 class SwitchSNMP:
-    def __init__(self, name):
+    def __init__(self, name, use_lldp=None):
         self.name = name
         self._port_min = 1
         self._port_max = 18     # TODO do not hardcode, get from SNMP?
@@ -112,10 +142,31 @@ class SwitchSNMP:
             'iso.3.6.1.4.1.96.100.6.1.4.0',  # Networking status
             *(f'iso.3.6.1.4.1.96.100.7.6.1.3.{i}' for i in self.sfp_port_range()),  # SFP port linkUp
             *(f'iso.3.6.1.4.1.96.100.7.6.1.4.{i}' for i in self.sfp_port_range()),  # SFP port mode
-            *(f'iso.3.6.1.4.1.96.100.7.8.1.22.{i}.1' for i in self.sfp_port_range()), # SFP port peerMAC
-            *(f'iso.3.6.1.4.1.96.100.7.8.1.23.{i}.1' for i in self.sfp_port_range()), # SFP port peerVID
-            *(f'iso.3.6.1.4.1.96.100.7.8.1.26.{i}.1' for i in self.sfp_port_range())  # SFP port ptpStatusOK
         ]
+
+        if use_lldp is None:    # automatic selection, LLDP preferred if available
+            try:
+                # Check if lldpd is started on the switch
+                logger.debug(f'Checking if LLDP is enabled on {name}')
+                lldp_started = self._get_snmp('.1.3.6.1.4.1.96.100.7.2.9.0') # WR-SWITCH-MIB::wrsStartCntLldpd.0
+                if int(lldp_started) == 1:
+                    logger.debug(f'LLDP is enabled on {name}')
+                    self._use_lldp = True
+            except easysnmp.exceptions.EasySNMPTimeoutError:
+                logger.info(f'Could not determine if LLDP is enabled on {name}, assuming disabled')
+                self._use_lldp = False
+        else:
+            self._use_lldp = use_lldp
+
+        # Select OIDs used for connectivity checking (either PTP or LLDP)
+        if self._use_lldp:
+            self._lldp_cache = CacheLLDP(self._session, 60)
+        else:
+            self._oids_variable.extend([
+                *(f'iso.3.6.1.4.1.96.100.7.8.1.22.{i}.1' for i in self.sfp_port_range()), # SFP port peerMAC
+                *(f'iso.3.6.1.4.1.96.100.7.8.1.23.{i}.1' for i in self.sfp_port_range()), # SFP port peerVID
+                *(f'iso.3.6.1.4.1.96.100.7.8.1.26.{i}.1' for i in self.sfp_port_range())  # SFP port ptpStatusOK
+            ])
         self._cache_variable = CacheSNMP(self._session, self._oids_variable, 60)    # 1 minute expiration period
 
 
@@ -227,16 +278,19 @@ class SwitchSNMP:
 
     @port_check
     def sfp_port_peer_mac(self, index):
-        mac = self._get_snmp(f'iso.3.6.1.4.1.96.100.7.8.1.22.{index}.1')
+        if self._use_lldp:
+            mac = self._lldp_cache.get(index)
+        else:
+            mac = self._get_snmp(f'iso.3.6.1.4.1.96.100.7.8.1.22.{index}.1')
 
-        if mac == "000000000000":   # nothing was ever connected here
-            return None
+            if mac == "000000000000":   # nothing was ever connected here
+                return None
 
-        # Check if the port is really up
-        # (it may happen that a device used to be connected there,
-        # now it is disconnected but MAC is still preserved).
-        if not self.sfp_port_link_up(index):
-            return None
+            # Check if the port is really up
+            # (it may happen that a device used to be connected there,
+            # now it is disconnected but MAC is still preserved).
+            if not self.sfp_port_link_up(index):
+                return None
 
         return mac
 
@@ -349,7 +403,7 @@ class Switch(Device):
         self.ccda = SwitchCCDA(name)
 
         try:
-            self.snmp = SwitchSNMP(name)
+            self.snmp = SwitchSNMP(name, use_lldp=None)
         # Convert SNMP exceptions to ConnectionError
         except easysnmp.exceptions.EasySNMPConnectionError as e:
             raise ConnectionError from e
