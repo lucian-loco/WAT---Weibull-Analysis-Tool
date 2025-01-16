@@ -194,7 +194,7 @@ class SwitchSNMP:
 
         else:   # non-cached OIDs
             try:
-                logger.warning(f'Querying non-cached OID: {oid}')
+                logger.info(f'Querying non-cached OID: {oid}')
                 response = self._session.get(oid)
             except easysnmp.exceptions.EasySNMPTimeoutError as e:
                 raise ConnectionError from e
