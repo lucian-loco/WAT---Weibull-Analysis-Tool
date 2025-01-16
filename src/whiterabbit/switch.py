@@ -154,7 +154,7 @@ class SwitchSNMP:
                 else:
                     logger.debug(f'Checking LLDP on {name}: disabled')
                     self._use_lldp = False
-            except easysnmp.exceptions.EasySNMPTimeoutError:
+            except (easysnmp.exceptions.EasySNMPTimeoutError, ConnectionError):
                 logger.info(f'Could not determine if LLDP is enabled on {name}, assuming disabled')
                 self._use_lldp = False
         else:
