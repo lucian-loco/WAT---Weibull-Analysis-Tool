@@ -147,11 +147,13 @@ class SwitchSNMP:
         if use_lldp is None:    # automatic selection, LLDP preferred if available
             try:
                 # Check if lldpd is started on the switch
-                logger.debug(f'Checking if LLDP is enabled on {name}')
                 lldp_started = self._get_snmp('.1.3.6.1.4.1.96.100.7.2.9.0') # WR-SWITCH-MIB::wrsStartCntLldpd.0
-                if int(lldp_started) == 1:
-                    logger.debug(f'LLDP is enabled on {name}')
+                if int(lldp_started) > 0:
+                    logger.debug(f'Checking LLDP on {name}: enabled')
                     self._use_lldp = True
+                else:
+                    logger.debug(f'Checking LLDP on {name}: disabled')
+                    self._use_lldp = False
             except easysnmp.exceptions.EasySNMPTimeoutError:
                 logger.info(f'Could not determine if LLDP is enabled on {name}, assuming disabled')
                 self._use_lldp = False
