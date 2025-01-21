@@ -446,11 +446,9 @@ class ConnectivityMAC(Connectivity):
         return self._devices[name]
 
 
-    def _build_mac_db(self):
+    def _build_mac_db(self, switch_list):
         """ Scans all WR switches to build a MAC address database. """
-        for entry in ccda.wr_switches():
-            switch_name = entry["name"]
-
+        for switch_name in switch_list:
             try:
                 switch = self.get_device(switch_name)
                 self._process_switch_ports(switch)
@@ -523,10 +521,14 @@ class ConnectivityMAC(Connectivity):
             logger.debug(f"   {my_port} <-> {peer_port}")
 
 
-    def process(self):
+    def process(self, switch_list=None):
         # TODO instead of clearing, it would be better to track changes and update only what is needed
         self.clear()
-        self._build_mac_db()
+
+        if switch_list is None:
+            switch_list = (x["name"] for x in ccda.wr_switches())
+
+        self._build_mac_db(switch_list)
 
         # Add fibers basing on the LLDP data
         for s in self._devices.values():
@@ -617,10 +619,18 @@ if __name__ == "__main__":
             help="Include all connections (may create a non-tree structure).")
     parser.add_argument("--top-switch", default=config.WR_GRANDMASTER,
             help="Switch which should be used as the top of the tree (grandmaster).")
+    parser.add_argument("--switch-list", default=None, type=str,
+            help="File containing a list of switches to process. If not specified, the device list is fetched from CCDA.")
     args = parser.parse_args()
 
     if args.verbose:
         logger.setLevel(logging.DEBUG)
+
+    if args.switch_list:
+        with open(args.switch_list) as f:
+            switch_list = f.read().splitlines()
+    else:
+        switch_list = None
 
     if args.source == "layoutdb":
         conn = ConnectivityDatabase.from_layoutdb(args.top_switch, all_connections=args.all)
@@ -631,7 +641,7 @@ if __name__ == "__main__":
     elif args.source == "icinga":
         conn = ConnectivityIcinga(args.top_switch, all_connections=args.all)
 
-    conn.process()
+    conn.process(switch_list)
     # logger.info("Incomplete fibers: {0}".format(len(conn._incomplete_fibers)))
     logger.info("Fibers: {0} Devices: {1}".format(len(conn._fibers), len(conn._devices)))
 
