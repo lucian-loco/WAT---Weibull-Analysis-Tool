@@ -11,7 +11,7 @@ import ccda
 import csv
 
 import config
-from switch import Switch
+from switch import Switch, SwitchSNMP, PtpState
 from devices import *
 
 logging.basicConfig(format='%(levelname)s:%(message)s')
@@ -550,10 +550,11 @@ class ConnectivityMAC(Connectivity):
         return MAC(mac1_num + port_index - 1)
 
 
-class ConnectivityPTP(ConnectivityMAC):
-    """ Class generating connectivity information from Icinga (which is currently based on PTP/SNMP). """
-    def __init__(self, top_switch, all_connections=False):
-        super(ConnectivityPTP, self).__init__(top_switch, all_connections)
+class ConnectivitySNMP(ConnectivityMAC):
+    """ Class generating connectivity information from SNMP (either PTP or LLDP). """
+    def __init__(self, top_switch, all_connections=False, source=SwitchSNMP.Source.AUTO):
+        super(ConnectivitySNMP, self).__init__(top_switch, all_connections)
+        self._source = source
 
 
     def _get_mac1(self, switch):
@@ -568,6 +569,17 @@ class ConnectivityPTP(ConnectivityMAC):
 
     def _port_range(self, switch):
         return switch.snmp.sfp_port_range()
+
+
+    def get_device(self, name):
+        # Nearly the same as ConnectivityMAC.get_device()
+        # but this one creates Switch objects with specific data source enforced
+        name = name.lower()
+
+        if name not in self._devices:
+            self._devices[name] = Switch(name, self._source)
+
+        return self._devices[name]
 
 
 class ConnectivityIcinga(ConnectivityMAC):
@@ -613,7 +625,8 @@ class ConnectivityIcinga(ConnectivityMAC):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generates WR connectivity information (JSON format)")
     
-    parser.add_argument("--source", "-s", choices=("layoutdb", "ptp", "csv", "icinga"), required=True,
+    parser.add_argument("--source", "-s", required=True,
+            choices=("layoutdb", "snmp-auto", "snmp-ptp", "snmp-lldp", "csv", "icinga"),
             help="Data source.")
     parser.add_argument("--output", "-o", type=str, default="connectivity.json",
             help="Output file name.")
@@ -640,8 +653,12 @@ if __name__ == "__main__":
         conn = ConnectivityDatabase.from_layoutdb(args.top_switch, all_connections=args.all)
     elif args.source == "csv":
         conn = ConnectivityDatabase.from_csv(args.top_switch, "connections.csv", all_connections=args.all)
-    elif args.source == "ptp":
-        conn = ConnectivityPTP(args.top_switch, all_connections=args.all)
+    elif args.source == "snmp-auto":
+        conn = ConnectivitySNMP(args.top_switch, all_connections=args.all, source=SwitchSNMP.Source.AUTO)
+    elif args.source == "snmp-ptp":
+        conn = ConnectivitySNMP(args.top_switch, all_connections=args.all, source=SwitchSNMP.Source.PTP)
+    elif args.source == "snmp-lldp":
+        conn = ConnectivitySNMP(args.top_switch, all_connections=args.all, source=SwitchSNMP.Source.LLDP)
     elif args.source == "icinga":
         conn = ConnectivityIcinga(args.top_switch, all_connections=args.all)
 

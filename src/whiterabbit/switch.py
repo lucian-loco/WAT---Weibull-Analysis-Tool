@@ -437,12 +437,12 @@ class SwitchIcinga(ExpiringCacheMixin):
 class Switch(Device):
     """ Represents a White Rabbit switch and provides access to its data. """
 
-    def __init__(self, name):
+    def __init__(self, name, snmp_source=SwitchSNMP.Source.AUTO):
         super(Switch, self).__init__(name)
         self.ccda = SwitchCCDA(name)
 
         try:
-            self.snmp = SwitchSNMP(name, data_source=SwitchSNMP.Source.AUTO)
+            self.snmp = SwitchSNMP(name, data_source=snmp_source)
         # Convert SNMP exceptions to ConnectionError
         except easysnmp.exceptions.EasySNMPConnectionError as e:
             raise ConnectionError from e
