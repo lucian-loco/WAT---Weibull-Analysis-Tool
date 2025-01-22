@@ -514,7 +514,7 @@ class ConnectivityMAC(Connectivity):
             peer_port = self.get_port(peer_mac)
 
             if peer_port is None:
-                logger.warning(f"Unknown MAC address {peer_mac} on {my_port}")
+                logger.info(f"Unknown MAC address {peer_mac} on {my_port}")
                 continue
 
             self._add_fiber(Fiber(my_port, peer_port))
