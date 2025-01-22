@@ -112,6 +112,10 @@ class CacheLLDP(ExpiringCacheMixin):
         for item in lldp_connections:
             assert(item.snmp_type == 'OCTETSTR')
             port = int(item.oid.split('.')[-2]) - 2
+
+            if port == 0:   # skip the management port
+                continue
+
             peer_mac = ''.join([f'{ord(x):02x}' for x in item.value])
             assert(port not in self._cache)
             self._cache[port] = peer_mac
