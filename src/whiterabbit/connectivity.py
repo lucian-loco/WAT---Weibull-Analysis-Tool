@@ -90,6 +90,12 @@ class Connectivity:
         return self._devices[self.get_peer_port(this_port).device]
 
 
+    def is_port_slave(self, port: Port):
+        """ Checks if the port is a slave port. """
+        # Typically the first port is set to 'slave' and connects to the master
+        return port.label == 1
+
+
     def save_to_json(self, filename):
         """ Saves connectivity data to a JSON file. """
         with open(filename, "w") as output:
@@ -137,8 +143,7 @@ class Connectivity:
                             logger.debug("  CHILD {0}".format(other_device.name))
                             next_queue.append(other_device)
 
-                        # Master switch is normally connected to port number one
-                        if port.label == 1:
+                        if self.is_port_slave(port):
                             assert(device.master == None or device.master == other_device.name)
                             device.master = other_device.name
 
@@ -173,8 +178,7 @@ class Connectivity:
                         if not other_device.is_switch():
                             continue
 
-                        # Master switch is normally connected to port number one
-                        if port.label == 1:
+                        if self.is_port_slave(port):
                             assert(device.master == None or device.master == other_device.name)
                             device.master = other_device.name
                             device.layer = other_device.layer + 1
