@@ -4,7 +4,7 @@ import os.path
 # add path to import modules from the directory above
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 import easysnmp
-from enum import IntEnum
+from enum import Enum, IntEnum
 from functools import wraps
 import logging
 logger = logging.getLogger(__name__)
@@ -136,7 +136,13 @@ class CacheLLDP(ExpiringCacheMixin):
 
 
 class SwitchSNMP:
-    def __init__(self, name, use_lldp=None):
+    class Source(Enum):
+        """ Enumeration of possible sources for the peer MAC address. """
+        AUTO = 0 # LLDP preferred, PTP as a fallback
+        PTP = 1
+        LLDP = 2
+
+    def __init__(self, name, data_source=Source.AUTO):
         self.name = name
         self._port_min = 1
         self._port_max = 18     # TODO do not hardcode, get from SNMP?
@@ -163,7 +169,7 @@ class SwitchSNMP:
             *(f'iso.3.6.1.4.1.96.100.7.8.1.7.1.{i}' for i in self.sfp_port_range()),  # PTP instance state
         ]
 
-        if use_lldp is None:    # automatic selection, LLDP preferred if available
+        if data_source == SwitchSNMP.Source.AUTO:    # automatic selection, LLDP preferred if available
             try:
                 # Check if lldpd is started on the switch
                 lldp_started = self._get_snmp('.1.3.6.1.4.1.96.100.7.2.9.0') # WR-SWITCH-MIB::wrsStartCntLldpd.0
@@ -173,11 +179,11 @@ class SwitchSNMP:
                 else:
                     logger.debug(f'Checking LLDP on {name}: disabled')
                     self._use_lldp = False
-            except (easysnmp.exceptions.EasySNMPTimeoutError, ConnectionError):
+            except ConnectionError:
                 logger.info(f'Could not determine if LLDP is enabled on {name}, assuming disabled')
                 self._use_lldp = False
         else:
-            self._use_lldp = use_lldp
+            self._use_lldp = data_source == SwitchSNMP.Source.LLDP
 
         # Select OIDs used for connectivity checking (either PTP or LLDP)
         if self._use_lldp:
@@ -188,6 +194,7 @@ class SwitchSNMP:
                 *(f'iso.3.6.1.4.1.96.100.7.8.1.23.{i}.1' for i in self.sfp_port_range()), # SFP port peerVID
                 *(f'iso.3.6.1.4.1.96.100.7.8.1.26.{i}.1' for i in self.sfp_port_range())  # SFP port ptpStatusOK
             ])
+
         self._cache_variable = CacheSNMP(self._session, self._oids_variable, 60)    # 1 minute expiration period
 
 
@@ -435,7 +442,7 @@ class Switch(Device):
         self.ccda = SwitchCCDA(name)
 
         try:
-            self.snmp = SwitchSNMP(name, use_lldp=None)
+            self.snmp = SwitchSNMP(name, data_source=SwitchSNMP.Source.AUTO)
         # Convert SNMP exceptions to ConnectionError
         except easysnmp.exceptions.EasySNMPConnectionError as e:
             raise ConnectionError from e
