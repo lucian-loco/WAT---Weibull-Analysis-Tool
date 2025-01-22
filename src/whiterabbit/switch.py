@@ -26,6 +26,20 @@ class PortMode(IntEnum):
     NONE = 5
 
 
+class PtpState(IntEnum):
+    """ Possible PTP states """
+    NA = 0
+    INITIALIZING = 1
+    FAULTY = 2
+    DISABLED = 3
+    LISTENING = 4
+    PRE_MASTER = 5
+    MASTER = 6
+    PASSIVE = 7
+    UNCALIBRATED = 8
+    SLAVE = 9
+
+
 class SwitchCCDA(ExpiringCacheMixin):
     def __init__(self, name):
         super(SwitchCCDA, self).__init__(4 * 60 * 60)   # 4 hours expiration period
@@ -146,6 +160,7 @@ class SwitchSNMP:
             'iso.3.6.1.4.1.96.100.6.1.4.0',  # Networking status
             *(f'iso.3.6.1.4.1.96.100.7.6.1.3.{i}' for i in self.sfp_port_range()),  # SFP port linkUp
             *(f'iso.3.6.1.4.1.96.100.7.6.1.4.{i}' for i in self.sfp_port_range()),  # SFP port mode
+            *(f'iso.3.6.1.4.1.96.100.7.8.1.7.1.{i}' for i in self.sfp_port_range()),  # PTP instance state
         ]
 
         if use_lldp is None:    # automatic selection, LLDP preferred if available
@@ -262,6 +277,17 @@ class SwitchSNMP:
     # Management port
     @property
     def mgmt_port_mac(self): return self._get_snmp('iso.3.6.1.2.1.2.2.1.6.2')
+
+
+    # PTP
+    @port_check
+    def ptp_state(self, index):
+        state = self._get_snmp(f'iso.3.6.1.4.1.96.100.7.8.1.7.{index}.1')
+
+        try:
+            return PtpState(state)
+        except ValueError:
+            return PtpState.NA
 
 
     # SFP ports
