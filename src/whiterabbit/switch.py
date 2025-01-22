@@ -315,7 +315,7 @@ class SwitchSNMP:
         else:
             mac = self._get_snmp(f'iso.3.6.1.4.1.96.100.7.8.1.22.{index}.1')
 
-            if mac == "000000000000":   # nothing was ever connected here
+            if mac == "000000000000" or mac.startswith("NOSUCH"):   # nothing was ever connected here
                 return None
 
             # Check if the port is really up
