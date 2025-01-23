@@ -189,7 +189,7 @@ class Connectivity:
                         logger.debug('No switch connected to {0}'.format(port))
 
 
-    def process(self):
+    def process(self, switch_list=None):
         assert(len(self.edges) == 0 and len(self.nodes) == 0)
 
         grandmaster = self._devices[self._grandmaster]
@@ -212,6 +212,9 @@ class Connectivity:
             if device.name == "None":
                 continue
 
+            if switch_list and device.name not in switch_list:
+                continue
+
             self.nodes.append({
                 "id": device.id,
                 "label": device.name,
@@ -228,6 +231,9 @@ class Connectivity:
                     device2_name = self._ports[fiber.end.name].device
 
                     if device1_name is None or device2_name is None:
+                        continue
+
+                    if switch_list and (device1_name not in switch_list or device2_name not in switch_list):
                         continue
 
                     device1 = self._devices[device1_name]
@@ -383,9 +389,9 @@ class ConnectivityDatabase(Connectivity):
         return port.name.upper().startswith(ConnectivityDatabase.SWITCH_PORT_PREFIX)
 
 
-    def process(self):
+    def process(self, switch_list=None):
         self._process_incomplete_fibers()
-        super(ConnectivityDatabase, self).process()
+        super(ConnectivityDatabase, self).process(switch_list)
 
 
 class MAC(int):
