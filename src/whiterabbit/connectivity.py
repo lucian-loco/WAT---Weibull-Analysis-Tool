@@ -310,6 +310,9 @@ class ConnectivityDatabase(Connectivity):
             port_name = row["{0}_NAME".format(pfx)]
             port_label = row["{0}_LABEL".format(pfx)]
 
+            if device_name is not None:
+                device_name = device_name.lower()
+
             port = self.get_port(port_name, True)
             port.label = port_label
             port.device = device_name
