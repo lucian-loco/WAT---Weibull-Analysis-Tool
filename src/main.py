@@ -94,9 +94,10 @@ def route_wr_main():
     return render_template('whiterabbit/main.html')
 
 
-@app.route('/whiterabbit/network')
+@app.route('/whiterabbit/network', methods=['GET'])
 def route_wr_network():
-    return render_template('whiterabbit/network.html')
+    source = request.args.get('source', 'ptp')
+    return render_template('whiterabbit/network.html', connectivity_source=source)
 
 
 @app.route('/whiterabbit/switch', methods=['GET'])
