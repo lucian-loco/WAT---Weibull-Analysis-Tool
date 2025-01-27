@@ -60,8 +60,8 @@
           },
           smooth: {
             type: "cubicBezier",
-            forceDirection: "vertical",
-            roundness: 0.3,
+            roundness: 0.5,
+            forceDirection: "horizontal",
           },
         },
 
@@ -73,10 +73,10 @@
 
         layout: {
           hierarchical: {
-            direction: "UD",	// up-down
-            levelSeparation: 200,	// distance between levels
-            nodeSpacing: 200,	// min distance between nodes
-            //treeSpacing: 200,	// distance between independent trees
+            direction: "LR",	// left-right
+            levelSeparation: 250,	// distance between levels
+            nodeSpacing: 100,	// min distance between nodes
+            treeSpacing: 200,	// distance between independent trees
             //parentCentralization: false,
             //sortMethod: "directed",
             //shakeTowards: "roots",
