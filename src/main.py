@@ -111,14 +111,9 @@ def route_wr_fiber(source, destination):
     return render_template('whiterabbit/fiber.html', source=source, destination=destination)
 
 
-@app.route('/whiterabbit/connections/layoutdb')
-def route_wr_connections_layoutdb():
-    return send_file('whiterabbit/data/connectivity_layoutdb.json')
-
-
-@app.route('/whiterabbit/connections/ptp')
-def route_wr_connections_ptp():
-    return send_file('whiterabbit/data/connectivity_ptp.json')
+@app.route('/whiterabbit/connections/<source>')
+def route_wr_connections(source):
+    return send_file(f'whiterabbit/data/connectivity_{source}.json')
 
 
 if __name__ == '__main__':
