@@ -82,17 +82,27 @@ const params = new URL(src).searchParams;
 const connectivity_source = params.get('src') ? params.get('src') : 'ptp';
 
 // Function to fetch data from another address
-function updateData() {
-fetch('/whiterabbit/connections/' + connectivity_source)
-    .then(response => response.json())
-    .then(data => {
-    // Clear existing data
-    nodes.clear();
-    edges.clear();
+function updateData(first_update) {
+    first_update = first_update || false;
 
-    // Add new nodes and edges
-    nodes.add(data.nodes);
-    edges.add(data.edges);
+    fetch('/whiterabbit/connections/' + connectivity_source)
+        .then(response => response.json())
+        .then(data => {
+            if (!first_update) {
+                nodes.clear();
+                edges.clear();
+            }
+
+            nodes.add(data.nodes);
+            edges.add(data.edges);
+
+            if (first_update) {
+                network.fit();
+            }
+
+            // TODO make it work
+            // TODO nodes.updateOnly(data.nodes);
+            // TODO edges.updateOnly(data.edges);
     })
     .catch(error => console.error('Error fetching data:', error));
 }
@@ -118,8 +128,7 @@ input.addEventListener('input', function () {
 });
 
 
-// Initial fetch and update
-updateData();
+updateData(true);   // Initial fetch and update
 
 // Fetch and update every 15 seconds
 setInterval(updateData, 15000);
