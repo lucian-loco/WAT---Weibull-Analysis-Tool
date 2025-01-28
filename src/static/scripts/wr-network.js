@@ -49,9 +49,9 @@ var options = {
     layout: {
         hierarchical: {
         direction: "LR",	// left-right
-        levelSeparation: 250,	// distance between levels
-        nodeSpacing: 100,	// min distance between nodes
-        treeSpacing: 200,	// distance between independent trees
+        levelSeparation: 400,	// distance between levels
+        nodeSpacing: 75,	// min distance between nodes
+        treeSpacing: 250,	// distance between independent trees
         //parentCentralization: false,
         //sortMethod: "directed",
         //shakeTowards: "roots",
