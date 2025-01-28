@@ -97,6 +97,27 @@ fetch('/whiterabbit/connections/' + connectivity_source)
     .catch(error => console.error('Error fetching data:', error));
 }
 
+
+// Assign a callback function for the searchbox
+const input = document.getElementById('search');
+
+input.addEventListener('input', function () {
+    const searchValue = input.value;
+    const animProps = { duration: 750, easingFunction: 'easeInQuad' }
+
+    ids = nodes.getIds({
+        filter: function (item) {
+            return item.label.includes(searchValue);
+        }
+    });
+
+    if (ids.length == 1) {
+        // network.selectNodes(ids);
+        network.focus(ids[0], { position: { x: 0, y: 0 }, scale: 1.5, animation: animProps });
+    }
+});
+
+
 // Initial fetch and update
 updateData();
 

@@ -21,6 +21,13 @@
         flex: 1;
         border: 1px solid lightgray;
       }
+      #searchbox {
+        width: 200px;
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        box-sizing: border-box;
+      }
     </style>
 
     <script type="text/javascript" src="/static/scripts/vis-network.min.js" defer></script>
@@ -38,6 +45,9 @@
     <div id="main">
       <div id="network"></div>
       <div id="panel"></div>
+      <div id="searchbox">
+        <input type="text" id="search" placeholder="Search...">
+      </div>
     </div>
   </body>
 </html>
