@@ -10,9 +10,10 @@ def update_ptp():
     while True:
         try:
             logger.info("Updating connectivity data from PTP (via Icinga)")
-            conn = connectivity.ConnectivityIcinga(config.WR_GRANDMASTER, False)
+            conn = connectivity.ConnectivityIcinga(config.WR_GRANDMASTER, True)
             conn.process()
             conn.save_to_json(config.WR_CONN_OUTPUT_FILE_PTP)
+            logger.info("Connectivity data from PTP (via Icinga) updated!")
         except Exception as e:
             logger.error(f"Error in PTP updater: {e}")
 
@@ -23,9 +24,10 @@ def update_layoutdb():
     while True:
         try:
             logger.info("Updating connectivity data from LayoutDB")
-            conn = connectivity.ConnectivityDatabase.from_layoutdb(config.WR_GRANDMASTER, False)
+            conn = connectivity.ConnectivityDatabase.from_layoutdb(config.WR_GRANDMASTER, True)
             conn.process()
             conn.save_to_json(config.WR_CONN_OUTPUT_FILE_LAYOUTDB)
+            logger.info("Connectivity data from LayoutDB updated!")
         except Exception as e:
             logger.error(f"Error in LayoutDB updater: {e}")
 
