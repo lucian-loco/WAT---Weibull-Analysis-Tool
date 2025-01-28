@@ -6,6 +6,7 @@ import os
 import urllib.parse
 import functools
 from flask import Flask, render_template, request, send_file, url_for
+from markupsafe import escape
 
 app = Flask(__name__)
 
@@ -100,10 +101,14 @@ def route_wr_network():
     return render_template('whiterabbit/network.html', connectivity_source=source)
 
 
-@app.route('/whiterabbit/switch', methods=['GET'])
-def route_wr_switch():
-    switch_name = request.args.get('name')
-    return render_template('whiterabbit/switch.html', switch_name=switch_name)
+@app.route('/whiterabbit/switch/<switch_name>')
+def route_wr_switch(switch_name):
+    return render_template('whiterabbit/switch.html', switch_name=escape(switch_name))
+
+
+@app.route('/whiterabbit/fiber/<int:source>/<int:destination>')
+def route_wr_fiber(source, destination):
+    return render_template('whiterabbit/fiber.html', source=source, destination=destination)
 
 
 @app.route('/whiterabbit/connections/layoutdb')

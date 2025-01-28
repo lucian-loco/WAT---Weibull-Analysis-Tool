@@ -128,6 +128,35 @@ input.addEventListener('input', function () {
 });
 
 
+// Select and deselect handlers
+network.on("selectNode", function (params) {
+    const nodeId = params.nodes[0];
+    if (nodeId) {
+        const node = nodes.get(nodeId);
+        $('#panel').load('/whiterabbit/switch/' + node.label);
+    }
+});
+
+
+network.on("deselectNode", function (params) {
+    $('#panel').innerHTML = ''
+});
+
+
+network.on("selectEdge", function (params) {
+    const edgeId = params.edges[0];
+    if (edgeId) {
+        const edge = edges.get(edgeId);
+        $('#panel').load('/whiterabbit/fiber/' + edge.from + '/' + edge.to);
+    }
+});
+
+
+network.on("deselectEdge", function (params) {
+    $('#panel').innerHTML = ''
+});
+
+
 updateData(true);   // Initial fetch and update
 
 // Fetch and update every 15 seconds
