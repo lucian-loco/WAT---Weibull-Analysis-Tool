@@ -233,7 +233,7 @@ def generate_graph(crate, version='TODAY', face=layout.Face.FRONT):
 
         if len(library_name) > 0:
             # Shape found in the library, use it
-            generator.add_shape(library_name[0], module.typeCode,
+            generator.add_shape(library_name[0], module.equipmentCode,
                     pos_x, pos_y, width=scaled_width, height=scaled_height, style=shape_style)
         else:
             # No shape available in the library, create a simple box with a description instead
