@@ -59,18 +59,51 @@ def route_crate_new():
     return render_template('drawio.html', drawio_libs=drawio_libs)
 
 
+def make_crate_graph(args):
+    crate_name = args.get('name', None)
+    crate_id = args.get('id', None)
+
+    if crate_name is None and crate_id is None:
+        return None
+
+    if crate_name is not None and crate_id is not None:
+        raise RuntimeError('Only one of crate name or ID can be provided')
+
+    if crate_name is not None:
+        crate_id = layout.crate_name_to_crate_id(crate_name)
+
+    version = args.get('version', 'TODAY')
+    face = layout.Face.from_str(args.get('face', 'front'))
+    return crate.generate_graph(crate_id, version, face)
+
+
+def get_crate_name(args):
+    crate_name = args.get('name', None)
+    crate_id = args.get('id', None)
+
+    if crate_name is None and crate_id is None:
+        return None
+
+    if crate_name is not None and crate_id is not None:
+        raise RuntimeError('Only one of crate name or ID can be provided')
+
+    if crate_name is not None:
+        return crate_name
+
+    version = args.get('version', 'TODAY')
+    return layout.crate_id_to_crate_name(crate_id, version)
+
+
 @app.route('/crate/edit', methods=['GET'])
 def route_crate_edit():
-    crate_name = request.args.get('name')
-    version = request.args.get('version', 'TODAY')
     drawio_libs = get_drawio_lib_urls()
 
-    if not crate_name:
-        return render_template('drawio.html', drawio_libs=drawio_libs)
-
     try:
-        face = layout.Face.from_str(request.args.get('face', 'front'))
-        graph = crate.generate_graph(crate_name, version, face)
+        graph = make_crate_graph(request.args)
+
+        if graph is None:   # no crate name/ID specified, show an empty draw.io editor
+            return render_template('drawio.html', drawio_libs=drawio_libs)
+
         document = graph.getvalue().decode('utf-8')
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
@@ -80,12 +113,11 @@ def route_crate_edit():
 
 @app.route('/crate/get', methods=['GET'])
 def route_crate_get():
-    crate_name = request.args.get('name')
-    version = request.args.get('version', 'TODAY')
-
     try:
-        face = layout.Face.from_str(request.args.get('face', 'front'))
-        graph = crate.generate_graph(crate_name, version, face)
+        graph = make_crate_graph(request.args)
+
+        if graph is None:
+            raise RuntimeError('Crate name or ID must be provided')
     except RuntimeError as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 

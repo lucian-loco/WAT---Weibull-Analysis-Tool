@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from dataclasses import dataclass
-import ccda
 import layout
 import io
 import glob
@@ -22,10 +21,8 @@ TITLE_HEIGHT = 20
 class Module:
     position: str   # EAM position
     description: str
-    typeName: str
-    typeCode: str
+    equipmentCode: str
     slotNumber: int
-    lun: int
 
     # Layout data (position expressed in slots)
     width: layout.Slice = None
@@ -44,10 +41,8 @@ class Module:
 @dataclass
 class Crate:
     position: str   # EAM position
-    name: str
-    typeName: str
-    typeCode: str
-    positionName: str
+    fecName: str
+    equipmentCode: str
     modules: list[Module]
 
     width: float = None     # width in meters
@@ -118,39 +113,33 @@ class Crate:
         return slot * self.z_slot_size
 
 
-def make_crate(fec_name, version='TODAY'):
-    crate_ccde_data = ccda.crate_by_label(fec_name)
-    crate_type_ccde_data = ccda.crate_type_by_name(crate_ccde_data['typeName'])
-    crate_layout_data = layout.get_crate(crate_type_ccde_data['equipmentCode'])
+def make_crate(crate_id, version='TODAY'):
+    crate_data = layout.get_crate_data(crate_id)
+    crate_dim_data = layout.get_crate_dims(crate_data['crate_equipment_code'])
 
     crate = Crate(
-            position     = crate_ccde_data['name'],
-            name         = crate_ccde_data['label'],
-            typeName     = crate_ccde_data['typeName'],
-            typeCode     = crate_type_ccde_data['equipmentCode'],
-            positionName = crate_ccde_data['positionName'],
+            position        = crate_data['crate_name'],
+            fecName         = crate_data['fec_name'],
+            equipmentCode   = crate_data['crate_equipment_code'],
 
-            width        = crate_layout_data['width'],
-            height       = crate_layout_data['height'],
-            depth        = crate_layout_data['depth'],
-            widthSlots   = crate_layout_data['width_dim'],
-            heightSlots  = crate_layout_data['height_dim'],
-            depthSlots   = crate_layout_data['depth_dim'],
+            width           = crate_dim_data['width'],
+            height          = crate_dim_data['height'],
+            depth           = crate_dim_data['depth'],
+            widthSlots      = crate_dim_data['width_dim'],
+            heightSlots     = crate_dim_data['height_dim'],
+            depthSlots      = crate_dim_data['depth_dim'],
 
-            modules      = [])
+            modules         = [])
 
-    for module_layout_data in layout.get_fec_modules(fec_name, version):
-        # TODO fetch LUN/typeName from CCDA?
+    for module_data in layout.get_crate_modules(crate_id, version):
         module = Module(
-            position    = module_layout_data['name'],
-            description = module_layout_data['description'],
-            typeName    = None,
-            typeCode    = 'HC' + module_layout_data['equipment_code'],
-            slotNumber  = module_layout_data['slot_number'],
-            lun         = None,
-            width       = module_layout_data['width'],
-            height      = module_layout_data['height'],
-            depth       = module_layout_data['depth'])
+            position        = module_data['name'],
+            description     = module_data['description'],
+            equipmentCode   = 'HC' + module_data['equipment_code'],
+            slotNumber      = module_data['slot_number'],
+            width           = module_data['width'],
+            height          = module_data['height'],
+            depth           = module_data['depth'])
 
         crate.modules.append(module)
 
@@ -172,7 +161,7 @@ def generate_graph(crate, version='TODAY', face=layout.Face.FRONT):
     start_y = TITLE_HEIGHT  # draw the crate layout right below the title
 
     # Crate name label
-    generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.name.upper())
+    generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.position.upper())
 
     # Draw the crate outline
     generator.add_box(start_x, start_y, crate.width * scale, crate.height * scale, style=drawio_styles.crate_outline)
@@ -202,11 +191,11 @@ def generate_graph(crate, version='TODAY', face=layout.Face.FRONT):
 
 
         # Find the appropriate shape, if available
-        library_name = generator.find_shape_library(module.typeCode)
+        library_name = generator.find_shape_library(module.equipmentCode)
 
         # Determine the shape orientation
         try:
-            shape = generator.get_shape(library_name[0], module.typeCode)
+            shape = generator.get_shape(library_name[0], module.equipmentCode)
             shape_horizontal = shape.is_horizontal
         except (KeyError, IndexError) as e:
             # No shape available, there will be a box with description
