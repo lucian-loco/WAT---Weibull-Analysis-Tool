@@ -47,8 +47,7 @@ class Crate:
     name: str
     typeName: str
     typeCode: str
-    locationName: str
-    rackName: str
+    positionName: str
     modules: list[Module]
 
     width: float = None     # width in meters
@@ -121,15 +120,15 @@ class Crate:
 
 def make_crate(fec_name):
     crate_ccde_data = ccda.crate_by_label(fec_name)
-    crate_layout_data = layout.get_crate(crate_ccde_data['typeCode'])
+    crate_type_ccde_data = ccda.crate_type_by_name(crate_ccde_data['typeName'])
+    crate_layout_data = layout.get_crate(crate_type_ccde_data['equipmentCode'])
 
     crate = Crate(
             position     = crate_ccde_data['name'],
             name         = crate_ccde_data['label'],
             typeName     = crate_ccde_data['typeName'],
-            typeCode     = crate_ccde_data['typeCode'],
-            locationName = crate_ccde_data['locationName'],
-            rackName     = crate_ccde_data['rackName'],
+            typeCode     = crate_type_ccde_data['equipmentCode'],
+            positionName = crate_ccde_data['positionName'],
 
             width        = crate_layout_data['width'],
             height       = crate_layout_data['height'],
