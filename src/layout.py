@@ -72,14 +72,16 @@ def get_crate(equipment_code):
     }
 
 
-def get_module(position):
+def get_module(position, version='TODAY'):
     cursor = db_hitdata.get_cursor()
     query = "SELECT MODULE_NAME, SLOT_NUMBER, " \
             "H_START_NUM, H_END_NUM, " \
             "W_START_NUM, W_END_NUM, " \
             "D_START_NUM, D_END_NUM " \
-            "FROM module_positions_v WHERE MODULE_NAME = :position"
-    response = cursor.execute(query, (position,)).fetchall()
+            "FROM MODULE_POSITIONS_DAYS_V WHERE MODULE_NAME = :position " \
+            "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
+            "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version)"
+    response = cursor.execute(query, (position, version, version)).fetchall()
 
     if len(response) != 1:
         raise ValueError(f'Invalid module position: {position}')
@@ -93,7 +95,7 @@ def get_module(position):
     }
 
 
-def get_fec_modules(fec_name):
+def get_fec_modules(fec_name, version='TODAY'):
     """ Returns a list of modules installed in a given FEC. """
     cursor = db_hitdata.get_cursor()
     query = "SELECT MODULE_NAME, SLOT_NUMBER, " \
@@ -101,8 +103,10 @@ def get_fec_modules(fec_name):
             "H_START_NUM, H_END_NUM, " \
             "W_START_NUM, W_END_NUM, " \
             "D_START_NUM, D_END_NUM " \
-            "FROM module_positions_v WHERE UPPER(FEC_NAME) = :fec_name"
-    response = cursor.execute(query, (fec_name.upper(),)).fetchall()
+            "FROM MODULE_POSITIONS_DAYS_V WHERE UPPER(FEC_NAME) = :fec_name " \
+            "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
+            "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version)"
+    response = cursor.execute(query, (fec_name.upper(), version, version)).fetchall()
 
     return [{
         'name': row[0],

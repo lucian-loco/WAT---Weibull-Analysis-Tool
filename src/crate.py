@@ -118,7 +118,7 @@ class Crate:
         return slot * self.z_slot_size
 
 
-def make_crate(fec_name):
+def make_crate(fec_name, version='TODAY'):
     crate_ccde_data = ccda.crate_by_label(fec_name)
     crate_type_ccde_data = ccda.crate_type_by_name(crate_ccde_data['typeName'])
     crate_layout_data = layout.get_crate(crate_type_ccde_data['equipmentCode'])
@@ -139,7 +139,7 @@ def make_crate(fec_name):
 
             modules      = [])
 
-    for module_layout_data in layout.get_fec_modules(fec_name):
+    for module_layout_data in layout.get_fec_modules(fec_name, version):
         # TODO fetch LUN/typeName from CCDA?
         module = Module(
             position    = module_layout_data['name'],
@@ -157,11 +157,11 @@ def make_crate(fec_name):
     return crate
 
 
-def generate_graph(crate, face=layout.Face.FRONT):
+def generate_graph(crate, version='TODAY', face=layout.Face.FRONT):
     logger.debug('Generating graph for %s', crate)
 
     # Get crate & module data
-    crate = make_crate(crate)
+    crate = make_crate(crate, version)
 
     generator.clear_page(PAGE_WIDTH, PAGE_HEIGHT)
     scale_hor = PAGE_WIDTH / crate.width
