@@ -4,5 +4,4 @@ venv
 .vscode
 .idea
 src/drawio
-src/whiterabbit/data
 __pycache__

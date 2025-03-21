@@ -21,21 +21,6 @@ if [ -z "$GUNICORN_LOG_LEVEL" ]; then
 fi
 
 
-cleanup() {
-    # Stop the updater process
-    echo "Cleaning up..."
-    kill $UPDATER_PID 2>/dev/null
-    wait $UPDATER_PID 2>/dev/null
-    exit
-}
-
-trap cleanup SIGINT SIGTERM
-
-
-# WR network connectivity data updater (running as a background task)
-python src/whiterabbit/updater.py &
-UPDATER_PID=$!
-
 # TMP_DIR="$(mktemp -d)"
 TMP_DIR="/tmp/hit-data-cache"
 mkdir -p "$TMP_DIR"
@@ -45,5 +30,3 @@ gunicorn --worker-tmp-dir /dev/shm --chdir src \
     --log-level $GUNICORN_LOG_LEVEL --workers $GUNICORN_WORKERS \
     --threads $GUNICORN_THREADS --timeout $GUNICORN_TIMEOUT \
     -b 0.0.0.0:8888 main:app
-
-kill -9 $UPDATER_PID

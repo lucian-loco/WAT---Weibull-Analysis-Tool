@@ -5,7 +5,7 @@ import layout
 import os
 import urllib.parse
 import functools
-from flask import Flask, render_template, request, send_file, url_for
+from flask import Flask, render_template, request, send_file, url_for, redirect
 from markupsafe import escape
 
 app = Flask(__name__)
@@ -127,28 +127,12 @@ def route_crate_get():
 
 @app.route('/whiterabbit')
 def route_wr_main():
-    return render_template('whiterabbit/main.html')
+    return redirect("https://mondi.app.cern.ch/whiterabbit", code=302)
 
 
 @app.route('/whiterabbit/network', methods=['GET'])
 def route_wr_network():
-    source = request.args.get('source', 'ptp')
-    return render_template('whiterabbit/network.html', connectivity_source=source)
-
-
-@app.route('/whiterabbit/switch/<switch_name>')
-def route_wr_switch(switch_name):
-    return render_template('whiterabbit/switch.html', switch_name=escape(switch_name))
-
-
-@app.route('/whiterabbit/fiber/<int:source>/<int:destination>')
-def route_wr_fiber(source, destination):
-    return render_template('whiterabbit/fiber.html', source=source, destination=destination)
-
-
-@app.route('/whiterabbit/connections/<source>')
-def route_wr_connections(source):
-    return send_file(f'whiterabbit/data/connectivity_{source}.json')
+    return redirect("https://mondi.app.cern.ch/whiterabbit/network", code=302)
 
 
 if __name__ == '__main__':
