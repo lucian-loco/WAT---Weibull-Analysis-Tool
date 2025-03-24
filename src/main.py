@@ -67,7 +67,7 @@ def make_crate_graph(args):
         return None
 
     if crate_name is not None and crate_id is not None:
-        raise RuntimeError('Only one of crate name or ID can be provided')
+        raise RuntimeError('Either crate name or crate ID should be provided, not both')
 
     if crate_name is not None:
         crate_id = layout.crate_name_to_crate_id(crate_name)
@@ -85,7 +85,7 @@ def get_crate_name(args):
         return None
 
     if crate_name is not None and crate_id is not None:
-        raise RuntimeError('Only one of crate name or ID can be provided')
+        raise RuntimeError('Either crate name or crate ID should be provided, not both')
 
     if crate_name is not None:
         return crate_name
@@ -105,7 +105,7 @@ def route_crate_edit():
             return render_template('drawio.html', drawio_libs=drawio_libs)
 
         document = graph.getvalue().decode('utf-8')
-    except RuntimeError as e:
+    except (RuntimeError, ValueError) as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
     return render_template('drawio.html', document_data=document, drawio_libs=drawio_libs)
@@ -118,7 +118,7 @@ def route_crate_get():
 
         if graph is None:
             raise RuntimeError('Crate name or ID must be provided')
-    except RuntimeError as e:
+    except (RuntimeError, ValueError) as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
     return send_file(graph, mimetype='text/drawio',
