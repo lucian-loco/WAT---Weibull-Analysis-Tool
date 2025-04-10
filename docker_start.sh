@@ -12,4 +12,5 @@ docker run --rm -p 8888:8888 -it \
     -e DB_PORT="$DB_PORT" \
     -e DB_SERV="$DB_SERV" \
     --entrypoint /bin/bash \
+    --user nobody \
     hit-data

@@ -14,7 +14,8 @@ RUN apt update && apt install -y \
 # RUN apt -y install ./drawio-amd64-*.deb && rm ./drawio-amd64-*.deb
 RUN wget https://github.com/jgraph/drawio-desktop/releases/download/v24.2.5/drawio-amd64-24.2.5.deb && \
     apt install -y ./drawio-amd64-24.2.5.deb && \
-    rm drawio-amd64-24.2.5.deb
+    rm drawio-amd64-24.2.5.deb && \
+    chmod a+w -R /opt/drawio
 
 RUN apt clean && rm -rf /var/lib/apt/lists/*
 
