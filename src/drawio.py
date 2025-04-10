@@ -637,6 +637,7 @@ class Exporter:
     def _build_command(self, input_path: Path, output_path: Path, output_format: str, export_settings: dict):
         cmd = [
             self.drawio_path,
+            # "--no-sandbox",
             "--export",
             "--format", output_format,
             "--output", str(output_path),
