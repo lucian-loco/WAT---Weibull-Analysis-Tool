@@ -2,9 +2,11 @@
 import weibull
 import crate
 import layout
+import drawio
 import os
 import urllib.parse
 import functools
+import io
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from markupsafe import escape
 
@@ -114,15 +116,43 @@ def route_crate_edit():
 @app.route('/crate/get', methods=['GET'])
 def route_crate_get():
     try:
+        crate_name = get_crate_name(request.args)
         graph = make_crate_graph(request.args)
 
         if graph is None:
             raise RuntimeError('Crate name or ID must be provided')
+
+        format = request.args.get('format', 'drawio')
+
+        if format == 'drawio':
+            mimetype = 'text/drawio'
+            buffer = graph  # not much to do
+
+        elif format in ('pdf', 'png'):
+            # use draw.io CLI to convert the graph to the requested format
+            mimetype = 'application/pdf' if format == 'pdf' else 'image/png'
+            exporter = drawio.Exporter()
+
+            buffer = io.BytesIO(exporter.convert(
+                input_data=graph.read(),
+                output_format=format,
+                output_file=None,
+                return_bytes=True,
+                scale=1.0,
+                border=0,
+                transparent=False
+            ))
+
+            buffer.seek(0)
+
+        else:
+            raise RuntimeError('Unsupported format: ' + format)
+
     except (RuntimeError, ValueError) as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
-    return send_file(graph, mimetype='text/drawio',
-                     as_attachment=True, download_name=f'{crate_name}.drawio')
+    return send_file(buffer, mimetype=mimetype, as_attachment=True,
+                      download_name=f'{crate_name}.{format}')
 
 
 @app.route('/whiterabbit')
