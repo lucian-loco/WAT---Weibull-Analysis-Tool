@@ -43,7 +43,7 @@ def generate_graph(part):
             unit='days',
             plot_title='Weibull Probability Plot for {0}'.format(part),
             path=buffer)
-    x.mrr()
+    x.mle()
 
 
     # Send the plot image
