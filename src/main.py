@@ -172,8 +172,8 @@ def route_crate_get():
                       download_name=f'{crate_name}.{format}')
 
 
-@app.route('/crate/stencil/show', methods=['GET'])
-def route_crate_stencil_show():
+@app.route('/crate/stencil/get', methods=['GET'])
+def route_crate_stencil_get():
     try:
         part = request.args.get('part')
         scale = request.args.get('scale', 1.0, type=float)
