@@ -57,6 +57,7 @@ and pass the credentials using the following environmental variables:
 
 Draw.io editor tries to preload shape libraries from a location specified by an environmental variable:
 * DRAWIO_LIBS_URL: URL providing access to the shape libraries (in form of "https://xxx/yyy"). Currently set to the public directory in HIT project cernbox.
+* DRAWIO_EXPORT_SERVER: URL to draw.io export server. It might be deployed within the same Openshift project. Check `drawio-export.md` for a more detailed instruction.
 
 When the project is running in an Openshift instance, you should use either 'Secrets' or 'ConfigMaps' mechanism to assign values to set these environmental variables.
 
