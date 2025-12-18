@@ -113,7 +113,7 @@ class Crate:
         return slot * self.z_slot_size
 
 
-def make_crate(crate_id, version='TODAY'):
+def get_crate_data(crate_id, version='TODAY'):
     crate_data = layout.get_crate_data(crate_id)
     crate_dim_data = layout.get_crate_dims(crate_data['crate_equipment_code'])
 
@@ -146,11 +146,11 @@ def make_crate(crate_id, version='TODAY'):
     return crate
 
 
-def generate_graph(crate, version='TODAY', face=layout.Face.FRONT):
-    logger.debug('Generating graph for %s', crate)
+def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
+    logger.debug('Generating crate graph for %s', crate)
 
     # Get crate & module data
-    crate = make_crate(crate, version)
+    crate = get_crate_data(crate, version)
 
     generator.clear_page(PAGE_WIDTH, PAGE_HEIGHT)
     scale_hor = PAGE_WIDTH / crate.width
@@ -263,7 +263,7 @@ if __name__ == '__main__':
     #data = get_crate_layout_data('CVREC')
     #print(data)
 
-    crate = make_crate('cfv-774-caos4')
+    crate = get_crate_data('cfv-774-caos4')
     pprint.pprint(crate)
 
     #graph = generate_graph('cfv-193-ascool')

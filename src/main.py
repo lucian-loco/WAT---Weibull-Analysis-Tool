@@ -76,7 +76,7 @@ def make_crate_graph(args):
 
     version = args.get('version', 'TODAY')
     face = layout.Face.from_str(args.get('face', 'front'))
-    return crate.generate_graph(crate_id, version, face)
+    return crate.generate_graph_crate(crate_id, version, face)
 
 
 def get_crate_name(args):
