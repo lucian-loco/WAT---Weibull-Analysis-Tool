@@ -7,11 +7,12 @@ import os
 import urllib.parse
 import functools
 import io
+import requests
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from markupsafe import escape
 
 app = Flask(__name__)
-
+drawio_export_server = os.environ.get('DRAWIO_EXPORT_URL', '')
 
 # TODO not very elegant, think of a better way
 @functools.cache
@@ -32,6 +33,22 @@ def get_drawio_lib_urls():
         pass    # no draw.io libraries, it is a pity, but not a showstopper
 
     return drawio_lib_urls
+
+
+def render_drawio(document, format):
+    if drawio_export_server == '':
+        raise RuntimeError('DRAWIO_EXPORT_URL is not configured')
+
+    response = requests.post(
+        drawio_export_server,
+        data={
+            'format': format,
+            'xml': document
+        }
+    )
+
+    response.raise_for_status()
+    return io.BytesIO(response.content)
 
 
 @app.route('/')
@@ -153,6 +170,24 @@ def route_crate_get():
 
     return send_file(buffer, mimetype=mimetype, as_attachment=True,
                       download_name=f'{crate_name}.{format}')
+
+
+@app.route('/crate/stencil/show', methods=['GET'])
+def route_crate_stencil_show():
+    try:
+        part = request.args.get('part')
+        scale = request.args.get('scale', 1.0, type=float)
+        graph = crate.generate_graph_stencil(part, scale)
+
+        if graph is None:   # no crate name/ID specified, show an empty draw.io editor
+            return render_template('drawio.html', drawio_libs=())
+
+        document = graph.getvalue().decode('utf-8')
+
+    except (RuntimeError, ValueError) as e:
+        return 'Stencil cannot be shown: ' + str(e), 400
+
+    return send_file(render_drawio(document, 'png'), mimetype='image/png')
 
 
 @app.route('/whiterabbit')

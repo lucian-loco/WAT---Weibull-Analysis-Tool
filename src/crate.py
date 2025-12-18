@@ -247,6 +247,35 @@ def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
     return buffer
 
 
+def generate_graph_stencil(stencil, scale=1.0):
+    logger.debug('Generating stencil graph for %s', stencil)
+    generator = drawio.Generator()
+
+    for filepath in glob.glob(os.path.join('drawio', '*.xml')):
+        try:
+            generator.load_library(filepath)
+        except:
+            logger.error(f'Could not load library {filepath}')
+
+    try:
+        # Find the shape to get its dimensions
+        library_name = generator.find_shape_library(stencil)
+        shape = generator.get_shape(library_name[0], stencil)
+
+        generator.clear_page(shape.width * scale, shape.height * scale)
+        generator.add_shape(library_name[0], stencil, 0, 0, shape.width * scale, shape.height * scale)
+    except (KeyError, IndexError) as e:
+        # No shape available, create a simple box with a description instead
+        generator.clear_page(200, 100)
+        generator.add_box(0, 0, 200, 100,
+                text=f'Stencil "{stencil}" is not available')
+
+    # Create a buffer which can be returned by flask
+    buffer = io.BytesIO(generator.as_string().encode('utf-8'))
+    buffer.seek(0)
+    return buffer
+
+
 # Create the generator instance and load the templates once
 generator = drawio.Generator()
 
