@@ -1,4 +1,4 @@
-env.sh
+env.ps1
 venv
 .venv
 .vscode
