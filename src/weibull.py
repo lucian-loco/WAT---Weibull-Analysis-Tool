@@ -49,3 +49,7 @@ def generate_graph(part):
     # Send the plot image
     buffer.seek(0)
     return buffer
+
+
+#print("test")
+print(get_data('HCCTDWA'))
