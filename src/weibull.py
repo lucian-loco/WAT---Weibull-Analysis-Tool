@@ -51,5 +51,4 @@ def generate_graph(part):
     return buffer
 
 
-#print("test")
-print(get_data('HCCTDWA'))
+#print(get_data('HCCTDWA'))
