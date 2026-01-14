@@ -1,3 +1,4 @@
+reliability==0.9.0
 predictr==0.1.27
 Flask==3.0.3
 gunicorn==22.0.0
