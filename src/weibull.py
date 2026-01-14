@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
 from predictr import Analysis
-from reliability import
+import reliability as rel
 import db_hitdata
 import io
 
