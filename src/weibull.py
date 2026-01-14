@@ -52,5 +52,24 @@ def generate_graph(part):
     buffer.seek(0)
     return buffer
 
+#new function to test directly locally
+def weibull_predictr_local(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
 
-#print(get_data('HCCTDWA'))
+    data = get_data(part)
+
+    # Weibull Analysis
+    # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
+    x = Analysis(df=data['failures'], ds=data['suspensions'],
+            show=True, save=False,
+            fig_size=(9.5, 6),    # (8, 6) -> 800x600
+            unit='days',
+            plot_title='Weibull Probability Plot for {0}'.format(part))
+    x.mle()
+
+
+#Test the Weibull plot directly
+part_name = 'HCCTDWA'
+print("Weibull plot with predictr is shown for ", part_name)
+weibull_predictr_local(part_name)
