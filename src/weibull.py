@@ -1,7 +1,11 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
 from predictr import Analysis
-import reliability as rel
+from reliability.Fitters import Fit_Weibull_2P
+from reliability.Fitters import Fit_Weibull_3P
+from reliability.Fitters import Fit_Weibull_Mixture
+from reliability.Fitters import Fit_Everything
+import matplotlib.pyplot as plt
 import db_hitdata
 import io
 
