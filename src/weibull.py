@@ -28,6 +28,7 @@ def get_data(part):
     return {'failures': failures, 'suspensions': suspensions}
 
 
+#old library and current state in the HIT Dashboard
 def generate_graph(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -52,12 +53,15 @@ def generate_graph(part):
     buffer.seek(0)
     return buffer
 
+
 #new function to test directly locally
 def weibull_predictr_local(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
     data = get_data(part)
+
+    print("Weibull plot with predictr is being created for ", part)
 
     # Weibull Analysis
     # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
@@ -71,5 +75,4 @@ def weibull_predictr_local(part):
 
 #Test the Weibull plot directly
 part_name = 'HCCTDWA'
-print("Weibull plot with predictr is shown for ", part_name)
 weibull_predictr_local(part_name)
