@@ -53,7 +53,7 @@ def generate_graph(part):
     buffer.seek(0)
     return buffer
 
-
+#ToDo for schleife um das ganze bauen fuer alle failure parts (daten aus sql query)
 #new function to test directly locally
 def weibull_predictr_local(part):
     if not part:
@@ -65,6 +65,7 @@ def weibull_predictr_local(part):
 
     # Weibull Analysis
     # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
+    #ToDo Implementierung der neuen "reliability" library
     x = Analysis(df=data['failures'], ds=data['suspensions'],
             show=True, save=False,
             fig_size=(9.5, 6),    # (8, 6) -> 800x600
@@ -74,5 +75,5 @@ def weibull_predictr_local(part):
 
 
 #Test the Weibull plot directly
-part_name = 'HCCTDWA'
+part_name = 'HCCFCRA'    #'HCCTDWA'
 weibull_predictr_local(part_name)
