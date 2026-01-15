@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import db_hitdata
 import io
 
+
 def get_data(part):
     failures = []
     suspensions = []
@@ -57,10 +58,9 @@ def generate_graph(part):
     buffer.seek(0)
     return buffer
 
-#ToDo for schleife um das ganze bauen fuer alle failure parts (daten aus sql query)
 
-# New function to test directly locally
-def weibull_predictr_local(part):
+#ToDo for schleife um das ganze bauen fuer alle failure parts (daten aus sql query)
+def weibull_2p(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -72,7 +72,6 @@ def weibull_predictr_local(part):
 
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
-    #ToDo implement of different libraries and weibull distributions
 
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=True,
@@ -90,12 +89,39 @@ def weibull_predictr_local(part):
     #plt.figure(figsize=(9.5, 6))
     plt.show()
 
-    AIC = wb.AICc
-    BIC = wb.BIC
+# Folgende Funktion kann auch nur zum "Finde die beste Verteilung" genutzt werden
+# und dann wird diese Verteilung nochmal manuell erstellt (CI kann dann weg)
+def weibull_fit_best(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
+
+    data = get_data(part)
+
+    failure_size = len(data['failures'])
+    suspension_size = len(data['suspensions'])
+    sample_size = failure_size + suspension_size
+
+    # Weibull Analysis
+    # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
+
+    wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
+                        show_probability_plot=True, print_results=True,
+                        method='MLE',
+                        show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=True,
+                        exclude=['Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+                        #label=f'Weibull fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
+                        )
+
+    #plt.title(f'Weibull Probability Plot for {part} with (α={wb.alpha:.3f}, β={wb.beta:.3f})')
+    #Todo size of the plot and axis limits still to be adjusted (maybe inside library directly)
+    #plt.ylim([0.5, 99])
+    #plt.figure(figsize=(9.5, 6))
+    plt.show()
 
 
-
+#ToDo implement of different libraries and weibull distributions
 
 # Test the Weibull plot directly
-part_name = 'HCCFCRA'   #'HCCTDWA'
-weibull_predictr_local(part_name)
+part_name = 'HCCTDWA' #'HCCFCRA'
+#weibull_2p(part_name)
+weibull_fit_best(part_name)
