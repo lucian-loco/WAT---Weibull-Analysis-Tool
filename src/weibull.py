@@ -58,26 +58,44 @@ def generate_graph(part):
     return buffer
 
 #ToDo for schleife um das ganze bauen fuer alle failure parts (daten aus sql query)
-#new function to test directly locally
+
+# New function to test directly locally
 def weibull_predictr_local(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
     data = get_data(part)
 
-    print("Weibull plot with predictr is being created for ", part)
+    failure_size = len(data['failures'])
+    suspension_size = len(data['suspensions'])
+    sample_size = failure_size + suspension_size
 
     # Weibull Analysis
-    # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
-    #ToDo Implementierung der neuen "reliability" library
-    x = Analysis(df=data['failures'], ds=data['suspensions'],
-            show=True, save=False,
-            fig_size=(9.5, 6),    # (8, 6) -> 800x600
-            unit='days',
-            plot_title='Weibull Probability Plot for {0}'.format(part))
-    x.mle()
+    # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
+    #ToDo implement of different libraries and weibull distributions
+
+    wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
+                        show_probability_plot=True, print_results=True,
+                        method='MLE',
+                        CI_type='none', # In case of CI --> CI='float between 0 and 1'
+                        label=f'Weibull fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
+                        )
+
+    plt.title(f'Weibull Probability Plot for {part} with (α={wb.alpha:.3f}, β={wb.beta:.3f})')
+    ax = plt.gca()
+    ax.set_xlabel('Time in days')
+    ax.set_ylabel('Unreliability')
+    #Todo size of the plot and axis limits still to be adjusted
+    #plt.ylim([0.5, 99])
+    #plt.figure(figsize=(9.5, 6))
+    plt.show()
+
+    AIC = wb.AICc
+    BIC = wb.BIC
 
 
-#Test the Weibull plot directly
-part_name = 'HCCFCRA'    #'HCCTDWA'
+
+
+# Test the Weibull plot directly
+part_name = 'HCCFCRA'   #'HCCTDWA'
 weibull_predictr_local(part_name)
