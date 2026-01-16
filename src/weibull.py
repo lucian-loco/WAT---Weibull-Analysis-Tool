@@ -58,8 +58,24 @@ def generate_graph(part):
     buffer.seek(0)
     return buffer
 
+#old library and current state but as local version
+def generate_graph_local(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
 
-#ToDo for schleife um das ganze bauen fuer alle failure parts (daten aus sql query)
+    data = get_data(part)
+
+    # Weibull Analysis
+    # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
+    x = Analysis(df=data['failures'], ds=data['suspensions'],
+            show=True, save=False,
+            fig_size=(9.5, 6),    # (8, 6) -> 800x600
+            unit='days',
+            plot_title='Weibull Probability Plot for {0}'.format(part)
+            )
+    x.mle()
+
+
 def weibull_2p(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -74,7 +90,7 @@ def weibull_2p(part):
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
-                        show_probability_plot=True, print_results=True,
+                        show_probability_plot=True, print_results=False, # Results can be found in the returned variables as well
                         method='MLE',
                         CI_type='none', # In case of CI --> CI='float between 0 and 1'
                         label=f'Weibull fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
@@ -88,6 +104,7 @@ def weibull_2p(part):
     #plt.ylim([0.5, 99])
     #plt.figure(figsize=(9.5, 6))
     plt.show()
+
 
 # Folgende Funktion kann auch nur zum "Finde die beste Verteilung" genutzt werden
 # und dann wird diese Verteilung nochmal manuell erstellt (CI kann dann weg)
@@ -121,7 +138,30 @@ def weibull_fit_best(part):
 
 #ToDo implement of different libraries and weibull distributions
 
-# Test the Weibull plot directly
-part_name = 'HCCTDWA' #'HCCFCRA'
+# Definition of the required part
+part_name = 'HCCBWRF'
+
+# Create the Weibull plot with 2 different ways
 #weibull_2p(part_name)
-weibull_fit_best(part_name)
+#generate_graph_local(part_name)
+#weibull_fit_best(part_name)
+
+
+#ToDo parts_failed automatically out of data base with sql query (daten aus sql query)
+
+# Every part-name with failures ≥ 4 of the weibull_data
+parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCCFCIH","HCCTARA",
+        "HCCBWRB","HCCVORA","HCCFIDH","HCCVOPF","HCCFIUF","HCCTGXA","HCCTRVD","HCCFCIV",
+        "HCCIBBB","HCCFIUB","HCCFIUC","HCCFCIY","HCCTDAB","HCCVOPC","HCCTDST",
+        "HCCBEGU","HCCAPAC","HCCBWMF","HCCCVAB","HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
+        "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
+        "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
+        "HCCFCRC","HCCFIUI","HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
+        "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
+        "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB","HCCVUEB",
+        "HCCVUEA","HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCVBRB","HCCTRV",
+        "HCCBWRE","HCCTRI","HCCVUNB","HCCFCRA","HCCFFIA"]
+
+#ToDo sort out the not functional ones for Weibull (!)
+for part in parts_failed:
+    weibull_2p(part)
