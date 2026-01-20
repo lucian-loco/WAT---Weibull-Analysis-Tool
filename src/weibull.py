@@ -27,10 +27,12 @@ def get_data(part):
             else:
                 raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
-#Todo limit the minimum failures < 4 and create the if condition whether failures are distinct for at least 2-3 different failure times
+#Todo limit of the minimum failures and minimum distinct failures need to be adjusted
 
-    if len(failures) < 2:
-        raise RuntimeError('Not enough failure data for "{0}"'.format(part))
+    if len(failures) < 4:
+        raise RuntimeError('Not enough failures in data for "{0}"'.format(part))
+    elif len(set(failures)) < 2:
+        raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
 
     return {'failures': failures, 'suspensions': suspensions}
 
@@ -95,16 +97,19 @@ def weibull_2p(part):
                         show_probability_plot=True, print_results=False, # Results can be found in the returned variables as well
                         method='MLE',
                         CI_type='none', # In case of CI --> CI='float between 0 and 1'
-                        label=f'Weibull 2P fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
+                        label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
-    plt.title(f'Weibull Probability Plot for {part} with (α={wb.alpha:.3f}, β={wb.beta:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.3f}, β={wb.beta:.3f})')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Unreliability')
-    #Todo size of the plot and axis limits still to be adjusted
-    #plt.ylim([0.5, 99])
-    #plt.figure(figsize=(9.5, 6))
+    ax.set_ylim(0.001, 0.999)
+    # Todo x-axis limit needs to be adjusted
+    xmin, xmax = ax.get_xlim()
+    ax.set_xlim(xmin * 0.7, xmax * 1.3)
+    fig = plt.gcf()
+    fig.set_size_inches(9.5, 6)
     plt.show()
 
 
@@ -131,10 +136,6 @@ def weibull_fit_best(part):
                         #label=f'Weibull fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
-    #plt.title(f'Weibull Probability Plot for {part} with (α={wb.alpha:.3f}, β={wb.beta:.3f})')
-    #Todo size of the plot and axis limits still to be adjusted (maybe inside library directly)
-    #plt.ylim([0.5, 99])
-    #plt.figure(figsize=(9.5, 6))
     plt.show()
 
 
@@ -144,7 +145,7 @@ def weibull_fit_best(part):
 part_name = 'HCCFIUB'            #'HCCVREC'
 
 # Create the Weibull plot with 2 different ways
-#weibull_2p(part_name)
+weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
