@@ -2,8 +2,11 @@
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
 from predictr import Analysis
 from reliability.Fitters import Fit_Weibull_2P
-from reliability.Fitters import Fit_Weibull_3P
-from reliability.Fitters import Fit_Weibull_Mixture
+#from reliability.Fitters import Fit_Weibull_3P
+#from reliability.Fitters import Fit_Weibull_Mixture
+#from reliability.Fitters import Fit_Weibull_CR
+#from reliability.Other_functions import distribution_explorer
+#from reliability.Probability_plotting import Weibull_probability_plot
 from reliability.Fitters import Fit_Everything
 import matplotlib.pyplot as plt
 import db_hitdata
@@ -29,7 +32,7 @@ def get_data(part):
 
 #Todo limit of the minimum failures and minimum distinct failures need to be adjusted
 
-    if len(failures) < 4:
+    if len(failures) < 2:
         raise RuntimeError('Not enough failures in data for "{0}"'.format(part))
     elif len(set(failures)) < 2:
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
@@ -57,10 +60,10 @@ def generate_graph(part):
             path=buffer)
     x.mle()
 
-
     # Send the plot image
     buffer.seek(0)
     return buffer
+
 
 #old library and current state but as local version
 def generate_graph_local(part):
@@ -90,6 +93,9 @@ def weibull_2p(part):
     suspension_size = len(data['suspensions'])
     sample_size = failure_size + suspension_size
 
+    if not data['suspensions']:
+        data['suspensions'] = None
+
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
@@ -105,9 +111,11 @@ def weibull_2p(part):
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Unreliability')
     ax.set_ylim(0.001, 0.999)
-    # Todo x-axis limit needs to be adjusted
+# Todo x-axis limit needs to be adjusted
     xmin, xmax = ax.get_xlim()
-    ax.set_xlim(xmin * 0.7, xmax * 1.3)
+    ax.set_xlim(xmin * 0.8, xmax * 1.2)
+# ToDo Check whether this works for example part=HCCTDAR
+    #ax.tick_params(axis='x', which='minor', bottom=False) # Prevents overlapping of x-axis' ticks
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
     plt.show()
@@ -129,11 +137,10 @@ def weibull_fit_best(part):
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
     wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
-                        show_probability_plot=True, print_results=True,
+                        show_probability_plot=False, print_results=True,
                         method='MLE',
-                        show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=True,
+                        show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=False,
                         exclude=['Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
-                        #label=f'Weibull fit (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
     plt.show()
@@ -141,13 +148,10 @@ def weibull_fit_best(part):
 
 #ToDo implement of different libraries and weibull distributions
 
-# Definition of the required part
-part_name = 'HCCFIUB'            #'HCCVREC'
+#ToDo implement own function for plotting the data out of the several distribution functions
 
-# Create the Weibull plot with 2 different ways
-weibull_2p(part_name)
-#generate_graph_local(part_name)
-#weibull_fit_best(part_name)
+# Definition of the required part
+part_name = 'HCCTGXA'        #'HCCFIUB'            #'HCCVREC'
 
 
 #ToDo parts_failed automatically out of data base with sql query (daten aus sql query)
@@ -159,6 +163,7 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
             "HCCBEGU","HCCAPAC","HCCBWMF","HCCCVAB","HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
             "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
             "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
+#start from here completely new
             "HCCFCRC","HCCFIUI","HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
             "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
             "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB","HCCVUEB",
@@ -168,10 +173,17 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
 # Refined selection of failed parts where it's noticeable that many asset failed at the same time --> look into it whether it was the same date --> building up criteria
 parts_failed_at_once = []
 
-# Refined selecion of failed parts where it's noticeable in the Weibull plot that there are probably multiple failure modes hidden in the data
+# Refined selection of failed parts where it's noticeable in the Weibull plot that there are probably multiple failure modes hidden in the data
 parts_mult_failure_mode = []
+
+
+# Create the Weibull plot with 2 different ways
+#weibull_2p(part_name)
+#generate_graph_local(part_name)
+#weibull_fit_best(part_name)
+
 
 # Next part to be inspected is HCCTDLT
 #ToDo sort out the not functional ones for Weibull (!)
-for part in parts_failed:
-    weibull_2p(part)
+#for part in parts_failed:
+#    weibull_2p(part)
