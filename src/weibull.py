@@ -114,8 +114,9 @@ def weibull_2p(part):
 # Todo x-axis limit needs to be adjusted
     xmin, xmax = ax.get_xlim()
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
-# ToDo Check whether this works for example part=HCCTDAR
-    #ax.tick_params(axis='x', which='minor', bottom=False) # Prevents overlapping of x-axis' ticks
+    labels = ax.get_xticklabels()
+    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
+        label.set_visible(i % 2 == 0)
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
     plt.show()
@@ -151,7 +152,7 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCTGXA'        #'HCCFIUB'            #'HCCVREC'
+part_name = 'HCCTDAR'            #'HCCTGXA'        #'HCCFIUB'            #'HCCVREC'
 
 
 #ToDo parts_failed automatically out of data base with sql query (daten aus sql query)
@@ -178,12 +179,12 @@ parts_mult_failure_mode = []
 
 
 # Create the Weibull plot with 2 different ways
-#weibull_2p(part_name)
+weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
 
-# Next part to be inspected is HCCTDLT
+
 #ToDo sort out the not functional ones for Weibull (!)
 #for part in parts_failed:
 #    weibull_2p(part)
