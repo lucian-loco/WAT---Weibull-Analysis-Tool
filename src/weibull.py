@@ -32,8 +32,8 @@ def get_data(part):
 
 #Todo limit of the minimum failures and minimum distinct failures need to be adjusted
 
-    if len(failures) < 2:
-        raise RuntimeError('Not enough failures in data for "{0}"'.format(part))
+    if len(failures) < 4:
+        raise RuntimeError('Not enough failures (more than 4) in data for "{0}"'.format(part))
     elif len(set(failures)) < 2:
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
 
@@ -116,7 +116,7 @@ def weibull_2p(part):
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
     labels = ax.get_xticklabels()
     for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i % 2 == 0)
+        label.set_visible(i < 3 or (i - 3) % 2 == 0)
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
     plt.show()
@@ -164,10 +164,10 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
             "HCCBEGU","HCCAPAC","HCCBWMF","HCCCVAB","HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
             "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
             "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
-#start from here completely new
             "HCCFCRC","HCCFIUI","HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
             "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
             "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB","HCCVUEB",
+#start from here completely new
             "HCCVUEA","HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
             "HCCBWRE","HCCTRI","HCCVUNB","HCCFCRA","HCCFFIA"]
 
@@ -179,12 +179,12 @@ parts_mult_failure_mode = []
 
 
 # Create the Weibull plot with 2 different ways
-weibull_2p(part_name)
+#weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
 
 
 #ToDo sort out the not functional ones for Weibull (!)
-#for part in parts_failed:
-#    weibull_2p(part)
+for part in parts_failed:
+    weibull_2p(part)
