@@ -98,7 +98,6 @@ def weibull_2p(part):
 
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
-
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False, # Results can be found in the returned variables as well
                         method='MLE',
@@ -159,17 +158,18 @@ part_name = 'HCCTDAR'            #'HCCTGXA'        #'HCCFIUB'            #'HCCVR
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
 parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCCFCIH","HCCTARA",
-            "HCCBWRB","HCCVORA","HCCFIDH","HCCVOPF","HCCFIUF","HCCTGXA","HCCTRVD","HCCFCIV",
-            "HCCIBBB","HCCFIUB","HCCFIUC","HCCFCIY","HCCTDAB","HCCVOPC","HCCTDST",
-            "HCCBEGU","HCCAPAC","HCCBWMF","HCCCVAB","HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
-            "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
-            "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
-            "HCCFCRC","HCCFIUI","HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
-            "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
-            "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB","HCCVUEB",
+                "HCCBWRB","HCCVORA","HCCFIDH","HCCVOPF","HCCFIUF","HCCTGXA","HCCTRVD","HCCFCIV",
+                'HCCIBBB',"HCCFIUB","HCCFIUC","HCCFCIY","HCCTDAB","HCCVOPC","HCCTDST",
+                "HCCBEGU","HCCAPAC","HCCBWMF",'HCCCVAB',"HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
+                "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
+                "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
+                "HCCFCRC",'HCCFIUI',"HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
+                "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
+                "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB",'HCCVUEB',
+                'HCCVUEA',"HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
 #start from here completely new
-            "HCCVUEA","HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
-            "HCCBWRE","HCCTRI","HCCVUNB","HCCFCRA","HCCFFIA"]
+                "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
+# parts with only '...' are not findable in the Catalogue
 
 # Refined selection of failed parts where it's noticeable that many asset failed at the same time --> look into it whether it was the same date --> building up criteria
 parts_failed_at_once = []
