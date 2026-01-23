@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
+import pandas as pd
 from predictr import Analysis
 from reliability.Fitters import Fit_Weibull_2P
 #from reliability.Fitters import Fit_Weibull_3P
@@ -11,33 +12,100 @@ from reliability.Fitters import Fit_Everything
 import matplotlib.pyplot as plt
 import db_hitdata
 import io
+import time
+
+
+start_time = time.time()
+
+
+def get_parts(failure_threshold):
+    # Only parts with failures more than the failure_threshold will be considered
+    if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
+        raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
+
+    part_names = []
+
+    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
+    with db_hitdata.get_cursor() as cursor:
+        sql_query = """SELECT * FROM (
+                            SELECT COUNT(*) AS FAILURES_COUNT, PART FROM weibull_data
+                                    WHERE STATUS = 'F'
+                                    GROUP BY PART) T
+                        WHERE T.FAILURES_COUNT > :threshold
+                        ORDER BY T.FAILURES_COUNT"""
+        result = cursor.execute(sql_query, {"threshold": failure_threshold})
+
+        for row in result:
+            part_names.append(str(row[1]))
+
+    if len(part_names) == 0:
+        raise RuntimeError('No parts found with more than "{0}" failures'.format(failure_threshold))
+
+    print("Number of parts found: {0}".format(len(part_names)))
+
+    return part_names
+
+
+def get_all_data(failure_threshold):
+    # Only parts with failures more than the failure_threshold will be considered
+    if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
+        raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
+
+    data = []
+
+    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
+    with db_hitdata.get_cursor() as cursor:
+        sql_query = """SELECT w.PART, w.ASSET_ID, w.RUNNING_TIME, w.STATUS, w.FAILURE_DATE FROM weibull_data w
+                            JOIN (
+                                SELECT PART FROM weibull_data 
+                                WHERE STATUS = 'F'
+                                GROUP BY PART
+                                HAVING COUNT(*) > :threshold) f
+                            ON f.PART = w.PART
+                            ORDER BY w.PART, w.STATUS, w.FAILURE_DATE, w.ASSET_ID"""
+        result = cursor.execute(sql_query, {"threshold": failure_threshold})
+
+        for row in result:
+            data.append(row)
+
+    weibull_data = pd.DataFrame(data, columns=['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE'])
+
+    if weibull_data.shape[0] == 0:
+        raise RuntimeError('No parts found with more than "{0}" failures'.format(failure_threshold))
+
+    print("Number of assets found: {0}".format(weibull_data.shape[0]))
+
+    return weibull_data
 
 
 def get_data(part):
     failures = []
     suspensions = []
+    failure_dates = []
 
-    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS
+    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
+    # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
     with db_hitdata.get_cursor() as cursor:
-        sql_query = "SELECT RUNNING_TIME, STATUS FROM Weibull_data WHERE PART = :part_id"
-        result = cursor.execute(sql_query, (part,))
+        sql_query = "SELECT RUNNING_TIME, STATUS, FAILURE_DATE FROM Weibull_data WHERE PART = :part_id"
+        result = cursor.execute(sql_query, {"part_id": part})
 
         for row in result:
             if row[1] == 'S':
                 suspensions.append(int(row[0]))
             elif row[1] == 'F':
                 failures.append(int(row[0]))
+                failure_dates.append(str(row[2]))
             else:
                 raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
-#Todo limit of the minimum failures and minimum distinct failures need to be adjusted
+#Todo limit of the minimum failures and minimum distinct failures need to be adjusted | insert rule whether even with 2 distinct failures but many failure times at this times --> no good data
 
     if len(failures) < 4:
         raise RuntimeError('Not enough failures (more than 4) in data for "{0}"'.format(part))
     elif len(set(failures)) < 2:
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
 
-    return {'failures': failures, 'suspensions': suspensions}
+    return {'failures': failures, 'suspensions': suspensions, 'failure_dates': failure_dates}
 
 
 #old library and current state in the HIT Dashboard
@@ -110,7 +178,6 @@ def weibull_2p(part):
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Unreliability')
     ax.set_ylim(0.001, 0.999)
-# Todo x-axis limit needs to be adjusted
     xmin, xmax = ax.get_xlim()
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
     labels = ax.get_xticklabels()
@@ -140,7 +207,8 @@ def weibull_fit_best(part):
                         show_probability_plot=False, print_results=True,
                         method='MLE',
                         show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=False,
-                        exclude=['Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+                        exclude=['Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P',
+                                 'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
                         )
 
     plt.show()
@@ -151,7 +219,7 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCTDAR'            #'HCCTGXA'        #'HCCFIUB'            #'HCCVREC'
+part_name = 'HCCFFIA'
 
 
 #ToDo parts_failed automatically out of data base with sql query (daten aus sql query)
@@ -167,9 +235,8 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
                 "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
                 "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB",'HCCVUEB',
                 'HCCVUEA',"HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
-#start from here completely new
                 "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
-# parts with only '...' are not findable in the Catalogue
+# parts with only '...' are not findable in the Catalogue --> out of order
 
 # Refined selection of failed parts where it's noticeable that many asset failed at the same time --> look into it whether it was the same date --> building up criteria
 parts_failed_at_once = []
@@ -183,8 +250,23 @@ parts_mult_failure_mode = []
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
+get_parts(3)
+
+end_time = time.time()
+duration = end_time - start_time
+print(f'Duration to get all parts: {duration} seconds')
+
+
+start_time = time.time()
+
+get_all_data(3)
+
+end_time = time.time()
+duration = end_time - start_time
+print(f'Duration to get all data into a data frame: {duration} seconds')
+
 
 
 #ToDo sort out the not functional ones for Weibull (!)
-for part in parts_failed:
-    weibull_2p(part)
+#for part in parts_failed:
+#    weibull_2p(part)
