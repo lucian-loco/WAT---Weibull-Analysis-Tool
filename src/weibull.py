@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
-import pandas as pd
 from predictr import Analysis
 from reliability.Fitters import Fit_Weibull_2P
 #from reliability.Fitters import Fit_Weibull_3P
@@ -9,15 +8,12 @@ from reliability.Fitters import Fit_Weibull_2P
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Probability_plotting import Weibull_probability_plot
 from reliability.Fitters import Fit_Everything
+import pandas as pd
 import matplotlib.pyplot as plt
 import db_hitdata
 import io
-import time
 
-
-start_time = time.time()
-
-
+# ToDo Exclude parts/data that has not more than 2 distinct failure times
 def get_parts(failure_threshold):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
@@ -31,7 +27,7 @@ def get_parts(failure_threshold):
                             SELECT COUNT(*) AS FAILURES_COUNT, PART FROM weibull_data
                                     WHERE STATUS = 'F'
                                     GROUP BY PART) T
-                        WHERE T.FAILURES_COUNT > :threshold
+                        WHERE T.FAILURES_COUNT >= :threshold
                         ORDER BY T.FAILURES_COUNT"""
         result = cursor.execute(sql_query, {"threshold": failure_threshold})
 
@@ -60,7 +56,7 @@ def get_all_data(failure_threshold):
                                 SELECT PART FROM weibull_data 
                                 WHERE STATUS = 'F'
                                 GROUP BY PART
-                                HAVING COUNT(*) > :threshold) f
+                                HAVING COUNT(*) >= :threshold) f
                             ON f.PART = w.PART
                             ORDER BY w.PART, w.STATUS, w.FAILURE_DATE, w.ASSET_ID"""
         result = cursor.execute(sql_query, {"threshold": failure_threshold})
@@ -133,7 +129,7 @@ def generate_graph(part):
     return buffer
 
 
-#old library and current state but as local version
+#old library and current state in the HIT Dashboard but as local version
 def generate_graph_local(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -219,10 +215,8 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCFFIA'
+part_name = 'HCCVSWB'
 
-
-#ToDo parts_failed automatically out of data base with sql query (daten aus sql query)
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
 parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCCFCIH","HCCTARA",
@@ -246,25 +240,9 @@ parts_mult_failure_mode = []
 
 
 # Create the Weibull plot with 2 different ways
-#weibull_2p(part_name)
+weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
-
-get_parts(3)
-
-end_time = time.time()
-duration = end_time - start_time
-print(f'Duration to get all parts: {duration} seconds')
-
-
-start_time = time.time()
-
-get_all_data(3)
-
-end_time = time.time()
-duration = end_time - start_time
-print(f'Duration to get all data into a data frame: {duration} seconds')
-
 
 
 #ToDo sort out the not functional ones for Weibull (!)
