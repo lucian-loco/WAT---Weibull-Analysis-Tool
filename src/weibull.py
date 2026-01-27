@@ -234,7 +234,8 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
 # parts with only '...' are not findable in the Catalogue --> out of order
 
 # Refined selection of failed parts that should be removed of the used data for sure:
-parts_to_be_removed = ["HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB",
+# Excluding because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB"
+parts_to_be_removed = ["HCCFIUB",
                        "HCCTRVA", "HCCBWRE", "HCCFCRA"]
 
 # Refined selection of failed parts that should presumably be removed of the used data:
