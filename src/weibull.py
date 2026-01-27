@@ -157,6 +157,7 @@ def weibull_2p(part):
     suspension_size = len(data['suspensions'])
     sample_size = failure_size + suspension_size
 
+#ToDo Think of how to deal with zeros in the right_censored data --> HCCVAED
     if not data['suspensions']:
         data['suspensions'] = None
 
@@ -215,7 +216,7 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCVSWB'
+part_name = 'HCCTRI'
 
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
@@ -232,19 +233,57 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
                 "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
 # parts with only '...' are not findable in the Catalogue --> out of order
 
-# Refined selection of failed parts where it's noticeable that many asset failed at the same time --> look into it whether it was the same date --> building up criteria
-parts_failed_at_once = []
+# Refined selection of failed parts that should be removed of the used data for sure:
+parts_to_be_removed = ["HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB",
+                       "HCCTRVA", "HCCBWRE", "HCCFCRA"]
 
-# Refined selection of failed parts where it's noticeable in the Weibull plot that there are probably multiple failure modes hidden in the data
-parts_mult_failure_mode = []
+# Refined selection of failed parts that should presumably be removed of the used data:
+parts_to_be_removed_presumably = ["HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"]
+
+# Refined selection of failed parts that should presumably be edited or the failures should be changed to suspended:
+parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFFIC", "HCCTDET", "HCCFISA",
+                                 "HCCVUEA", "HCCVSWA", "HCCVFWA", "HCCFFIA",
+                                 "HCCVOGE"]
+
+# Refined selection of failed parts that contains failures with interesting dates that needs to be checked:
+parts_with_sus_dates = ["HCCVOJI", "HCCVFEC", "HCCFCIH", "HCCVOPF",
+                        "HCCFCIV", "HCCTDAB", "HCCTDLT", "HCCBWDC",
+                        "HCCVOJB", "HCCTDAR", "HCCBWDB", "HCCTDPR",
+                        "HCCCTMA", "HCCFFIB", "HCCFCRB", "HCCVOTB",
+                        "HCCTRP", "HCCTRI"]
+
+# Refined selection of failed parts that are not sorted out yet (may contain the good data at some point):
+parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
+                          "HCCTARA", "HCCBWRB", "HCCVORA", "HCCFIDH",
+                          "HCCFIUF", "HCCTRVD", "HCCIBBB", "HCCFCIY",
+                          "HCCVOPC", "HCCTDST", "HCCBEGU", "HCCAPAC",
+                          "HCCBWMF", "HCCCVAB", "HCCFEII", "HCCFCIA",
+                          "HCCBMIA", "HCCFCRJ", "HCCVORB", "HCCVOIA",
+                          "HCCVOAA", "HCCFIDB", "HCCTDWA", "HCCFIDE",
+                          "HCCVORD", "HCCFCRC", "HCCFIUI", "HCCVRED",
+                          "HCCVREC", "HCCTDAG", "HCCFFIE", "HCCVFEA",
+                          "HCCFCRG", "HCCVUNC", "HCCTDAH", "HCCVFEB",
+                          "HCCVSEB", "HCCFEIA", "HCCVSEA", "HCCFCRI",
+                          "HCCVAED", "HCCTRV", "HCCVUNB"]
 
 
 # Create the Weibull plot with 2 different ways
-weibull_2p(part_name)
+#weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
 
-#ToDo sort out the not functional ones for Weibull (!)
-#for part in parts_failed:
-#    weibull_2p(part)
+part_groups = [parts_to_be_removed, parts_to_be_removed_presumably,
+               parts_to_be_edited_or_changed, parts_with_sus_dates,
+               parts_failed_selection]
+
+for parts in part_groups:
+    for part in parts:
+        weibull_2p(part)
+
+    # Weißer Platzhalter-Plot zur Trennung
+    fig, ax = plt.subplots()
+    ax.set_facecolor('white')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plt.show()
