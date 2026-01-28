@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import db_hitdata
 import io
 
-# ToDo Exclude parts/data that has not more than 2 distinct failure times
-def get_parts(failure_threshold):
+
+# Number from 1 as threshold for the number of failures and the count of distinct failure times
+def get_parts(failure_threshold, distinct_threshold):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
         raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
@@ -24,12 +25,13 @@ def get_parts(failure_threshold):
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
     with db_hitdata.get_cursor() as cursor:
         sql_query = """SELECT * FROM (
-                            SELECT COUNT(*) AS FAILURES_COUNT, PART FROM weibull_data
+                            SELECT COUNT(*) AS FAILURES_COUNT, PART, COUNT(DISTINCT RUNNING_TIME) as DISTINCT_FAILURES_COUNT FROM weibull_data
                                     WHERE STATUS = 'F'
                                     GROUP BY PART) T
                         WHERE T.FAILURES_COUNT >= :threshold
+                        AND T.DISTINCT_FAILURES_COUNT >= :distinct
                         ORDER BY T.FAILURES_COUNT"""
-        result = cursor.execute(sql_query, {"threshold": failure_threshold})
+        result = cursor.execute(sql_query, {"threshold": failure_threshold, "distinct": distinct_threshold})
 
         for row in result:
             part_names.append(str(row[1]))
@@ -42,10 +44,14 @@ def get_parts(failure_threshold):
     return part_names
 
 
-def get_all_data(failure_threshold):
+# Number from 1 as threshold for the number of failures and the count of distinct failure times
+def get_all_data(failure_threshold, distinct_threshold):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
         raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
+
+    if not (isinstance(distinct_threshold, int) and distinct_threshold >= 1):
+        raise RuntimeError('Invalid distinct threshold "{0}"'.format(distinct_threshold))
 
     data = []
 
@@ -56,10 +62,11 @@ def get_all_data(failure_threshold):
                                 SELECT PART FROM weibull_data 
                                 WHERE STATUS = 'F'
                                 GROUP BY PART
-                                HAVING COUNT(*) >= :threshold) f
+                                HAVING COUNT(*) >= :threshold
+                                AND COUNT(DISTINCT RUNNING_TIME) >= :distinct) f
                             ON f.PART = w.PART
                             ORDER BY w.PART, w.STATUS, w.FAILURE_DATE, w.ASSET_ID"""
-        result = cursor.execute(sql_query, {"threshold": failure_threshold})
+        result = cursor.execute(sql_query, {"threshold": failure_threshold, "distinct": distinct_threshold})
 
         for row in result:
             data.append(row)
