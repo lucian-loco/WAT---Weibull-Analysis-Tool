@@ -84,7 +84,7 @@ def get_all_data(failure_threshold, distinct_threshold):
 def get_data(part):
     failures = []
     suspensions = []
-    failure_dates = []
+    irp_dates = []
 
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
     # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
@@ -97,7 +97,7 @@ def get_data(part):
                 suspensions.append(int(row[0]))
             elif row[1] == 'F':
                 failures.append(int(row[0]))
-                failure_dates.append(str(row[2]))
+                irp_dates.append(str(row[2]))
             else:
                 raise RuntimeError('Unknown status "{0}"'.format(row[1]))
 
@@ -108,7 +108,7 @@ def get_data(part):
     elif len(set(failures)) < 2:
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
 
-    return {'failures': failures, 'suspensions': suspensions, 'failure_dates': failure_dates}
+    return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 
 
 #old library and current state in the HIT Dashboard
@@ -164,7 +164,10 @@ def weibull_2p(part):
     suspension_size = len(data['suspensions'])
     sample_size = failure_size + suspension_size
 
-#ToDo Think of how to deal with zeros in the right_censored data --> HCCVAED
+    # Prevent zeros in the right censored data --> HCCVAED
+    if data['suspensions']:
+        data['suspensions'] = [t for t in data['suspensions'] if t > 0]
+
     if not data['suspensions']:
         data['suspensions'] = None
 
@@ -223,7 +226,7 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCTRI'
+part_name = 'HCCVAED'
 
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
@@ -276,7 +279,7 @@ parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
 
 
 # Create the Weibull plot with 2 different ways
-#weibull_2p(part_name)
+weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
@@ -285,13 +288,13 @@ part_groups = [parts_to_be_removed, parts_to_be_removed_presumably,
                parts_to_be_edited_or_changed, parts_with_sus_dates,
                parts_failed_selection]
 
-for parts in part_groups:
-    for part in parts:
-        weibull_2p(part)
-
-    # Weißer Platzhalter-Plot zur Trennung
-    fig, ax = plt.subplots()
-    ax.set_facecolor('white')
-    ax.set_xticks([])
-    ax.set_yticks([])
-    plt.show()
+#for parts in part_groups:
+#    for part in parts:
+#        weibull_2p(part)
+#
+#    # Weißer Platzhalter-Plot zur Trennung
+#    fig, ax = plt.subplots()
+#    ax.set_facecolor('white')
+#    ax.set_xticks([])
+#    ax.set_yticks([])
+#    plt.show()
