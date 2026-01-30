@@ -105,7 +105,7 @@ def get_data(part):
 
     if len(failures) < 4:
         raise RuntimeError('Not enough failures (more than 4) in data for "{0}"'.format(part))
-    elif len(set(failures)) < 2:
+    elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
 
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
@@ -165,8 +165,8 @@ def weibull_2p(part):
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data --> HCCVAED
-    if data['suspensions']:
-        data['suspensions'] = [t for t in data['suspensions'] if t > 0]
+    #if data['suspensions']:
+    #    data['suspensions'] = [t for t in data['suspensions'] if t > 0]
 
     if not data['suspensions']:
         data['suspensions'] = None
@@ -243,13 +243,10 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
                 "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
 # parts with only '...' are not findable in the Catalogue --> out of order
 
-# Refined selection of failed parts that should be removed of the used data for sure:
-# Excluding because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB"
-parts_to_be_removed = ["HCCFIUB",
-                       "HCCTRVA", "HCCBWRE", "HCCFCRA"]
+# Excluded because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB", "HCCTRVA", "HCCBWRE", "HCCFCRA", "HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"
 
-# Refined selection of failed parts that should presumably be removed of the used data:
-parts_to_be_removed_presumably = ["HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"]
+# ToDo Include the .csv file to double check these parts and make it still accessible
+
 
 # Refined selection of failed parts that should presumably be edited or the failures should be changed to suspended:
 parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFFIC", "HCCTDET", "HCCFISA",
@@ -279,22 +276,21 @@ parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
 
 
 # Create the Weibull plot with 2 different ways
-weibull_2p(part_name)
+#weibull_2p(part_name)
 #generate_graph_local(part_name)
 #weibull_fit_best(part_name)
 
 
-part_groups = [parts_to_be_removed, parts_to_be_removed_presumably,
-               parts_to_be_edited_or_changed, parts_with_sus_dates,
+part_groups = [parts_to_be_edited_or_changed, parts_with_sus_dates,
                parts_failed_selection]
 
-#for parts in part_groups:
-#    for part in parts:
-#        weibull_2p(part)
-#
-#    # Weißer Platzhalter-Plot zur Trennung
-#    fig, ax = plt.subplots()
-#    ax.set_facecolor('white')
-#    ax.set_xticks([])
-#    ax.set_yticks([])
-#    plt.show()
+for parts in part_groups:
+    for part in parts:
+        weibull_2p(part)
+
+    # Weißer Platzhalter-Plot zur Trennung
+    fig, ax = plt.subplots()
+    ax.set_facecolor('white')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plt.show()
