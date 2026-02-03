@@ -16,6 +16,8 @@ import os
 
 
 # Number from 1 as threshold for the number of failures and the count of distinct failure times
+
+# ToDo Define default thresholds
 def get_parts(failure_threshold, distinct_threshold):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
@@ -176,7 +178,7 @@ def weibull_2p(part, save_path=None):
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False, # Results can be found in the returned variables as well
-                        method='MLE',
+                        method='MLE', optimizer='best', # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
                         CI_type='none', # In case of CI --> CI='float between 0 and 1'
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
@@ -229,7 +231,7 @@ def weibull_fit_best(part):
 #ToDo implement own function for plotting the data out of the several distribution functions
 
 # Definition of the required part
-part_name = 'HCCVAED'
+part_name = 'HCCVREC'    #'HCCVAED'
 
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
