@@ -12,6 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import db_hitdata
 import io
+import os
 
 
 # Number from 1 as threshold for the number of failures and the count of distinct failure times
@@ -154,7 +155,7 @@ def generate_graph_local(part):
     x.mle()
 
 
-def weibull_2p(part):
+def weibull_2p(part, save_path=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -192,6 +193,8 @@ def weibull_2p(part):
         label.set_visible(i < 3 or (i - 3) % 2 == 0)
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
+    if save_path:
+        plt.savefig(save_path, dpi=300)
     plt.show()
 
 
@@ -258,17 +261,17 @@ parts_with_sus_dates = ["HCCVOJI", "HCCVFEC", "HCCFCIH", "HCCVOPF",
                         "HCCFCIV", "HCCTDAB", "HCCTDLT", "HCCBWDC",
                         "HCCVOJB", "HCCTDAR", "HCCBWDB", "HCCTDPR",
                         "HCCCTMA", "HCCFFIB", "HCCFCRB", "HCCVOTB",
-                        "HCCTRP", "HCCTRI"]
+                        "HCCTRP", "HCCTRI", "HCCVOPC", "HCCVORD"]
 
 # Refined selection of failed parts that are not sorted out yet (may contain the good data at some point):
 parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
                           "HCCTARA", "HCCBWRB", "HCCVORA", "HCCFIDH",
                           "HCCFIUF", "HCCTRVD", "HCCIBBB", "HCCFCIY",
-                          "HCCVOPC", "HCCTDST", "HCCBEGU", "HCCAPAC",
+                          "HCCTDST", "HCCBEGU", "HCCAPAC",
                           "HCCBWMF", "HCCCVAB", "HCCFEII", "HCCFCIA",
                           "HCCBMIA", "HCCFCRJ", "HCCVORB", "HCCVOIA",
                           "HCCVOAA", "HCCFIDB", "HCCTDWA", "HCCFIDE",
-                          "HCCVORD", "HCCFCRC", "HCCFIUI", "HCCVRED",
+                          "HCCFCRC", "HCCFIUI", "HCCVRED",
                           "HCCVREC", "HCCTDAG", "HCCFFIE", "HCCVFEA",
                           "HCCFCRG", "HCCVUNC", "HCCTDAH", "HCCVFEB",
                           "HCCVSEB", "HCCFEIA", "HCCVSEA", "HCCFCRI",
@@ -281,16 +284,27 @@ parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
 #weibull_fit_best(part_name)
 
 
+base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots"
+
 part_groups = [parts_to_be_edited_or_changed, parts_with_sus_dates,
                parts_failed_selection]
 
-for parts in part_groups:
+for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_dates", "parts_failed_selection"], part_groups):
+    group_dir = os.path.join(base_dir, group_name)
+    os.makedirs(group_dir, exist_ok=True)
+
     for part in parts:
-        weibull_2p(part)
+        save_path = os.path.join(group_dir, f"weibull_plot_{part}.png")
+        weibull_2p(part, save_path=save_path)
+
+
+#for parts in part_groups:
+#    for part in parts:
+#        weibull_2p(part)
 
     # Weißer Platzhalter-Plot zur Trennung
-    fig, ax = plt.subplots()
-    ax.set_facecolor('white')
-    ax.set_xticks([])
-    ax.set_yticks([])
-    plt.show()
+#    fig, ax = plt.subplots()
+#    ax.set_facecolor('white')
+#    ax.set_xticks([])
+#    ax.set_yticks([])
+#    plt.show()
