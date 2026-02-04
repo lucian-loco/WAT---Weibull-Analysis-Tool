@@ -16,8 +16,6 @@ import os
 
 
 # Number >= 1 as threshold for the number of failures and the count of distinct failure times
-
-# ToDo Define default thresholds
 def get_parts(failure_threshold=4, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
