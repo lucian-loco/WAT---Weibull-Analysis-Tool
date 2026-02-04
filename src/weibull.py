@@ -15,10 +15,10 @@ import io
 import os
 
 
-# Number from 1 as threshold for the number of failures and the count of distinct failure times
+# Number >= 1 as threshold for the number of failures and the count of distinct failure times
 
 # ToDo Define default thresholds
-def get_parts(failure_threshold, distinct_threshold):
+def get_parts(failure_threshold=4, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
         raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
@@ -47,8 +47,8 @@ def get_parts(failure_threshold, distinct_threshold):
     return part_names
 
 
-# Number from 1 as threshold for the number of failures and the count of distinct failure times
-def get_all_data(failure_threshold, distinct_threshold):
+# Number >= 1 as threshold for the number of failures and the count of distinct failure times
+def get_all_data(failure_threshold=4, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
         raise RuntimeError('Invalid failure threshold "{0}"'.format(failure_threshold))
