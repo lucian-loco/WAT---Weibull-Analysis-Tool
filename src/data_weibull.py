@@ -99,8 +99,8 @@ def get_data(part):
 
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 
-
-# Get data for Weibull Analysis out of local .csv files
+# ToDo extract out of the .csv files the failures and suspended data
+# Get data for the Weibull Analysis out of local .csv files
 def get_csv_data(query='above 3'):
     base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull-Data_before-cleaning-Christine"
 
