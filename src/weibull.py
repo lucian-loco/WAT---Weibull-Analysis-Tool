@@ -11,6 +11,8 @@ from reliability.Fitters import Fit_Everything
 import matplotlib.pyplot as plt
 import io
 import os
+import warnings
+import data_weibull
 from data_weibull import get_data
 #from data_weibull import get_all_data
 #from data_weibull import get_parts
@@ -71,8 +73,9 @@ def weibull_2p(part, save_path=None):
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data --> HCCVAED
-    #if data['suspensions']:
-    #    data['suspensions'] = [t for t in data['suspensions'] if t > 0]
+    if data['suspensions']:
+        data['suspensions'] = [t for t in data['suspensions'] if t > 0]
+        warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
@@ -136,53 +139,6 @@ def weibull_fit_best(part):
 # Definition of the required part
 part_name = 'HCCVREC'    #'HCCVAED'
 
-
-# Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
-parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCCFCIH","HCCTARA",
-                "HCCBWRB","HCCVORA","HCCFIDH","HCCVOPF","HCCFIUF","HCCTGXA","HCCTRVD","HCCFCIV",
-                'HCCIBBB',"HCCFIUB","HCCFIUC","HCCFCIY","HCCTDAB","HCCVOPC","HCCTDST",
-                "HCCBEGU","HCCAPAC","HCCBWMF",'HCCCVAB',"HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
-                "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
-                "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
-                "HCCFCRC",'HCCFIUI',"HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
-                "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
-                "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB",'HCCVUEB',
-                'HCCVUEA',"HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
-                "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
-# parts with only '...' are not findable in the Catalogue --> out of order
-
-# Excluded because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB", "HCCTRVA", "HCCBWRE", "HCCFCRA", "HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"
-
-# ToDo Include the .csv file to double check these parts and make it still accessible
-
-
-# Refined selection of failed parts that should presumably be edited or the failures should be changed to suspended:
-parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFFIC", "HCCTDET", "HCCFISA",
-                                 "HCCVUEA", "HCCVSWA", "HCCVFWA", "HCCFFIA",
-                                 "HCCVOGE"]
-
-# Refined selection of failed parts that contains failures with interesting dates that needs to be checked:
-parts_with_sus_dates = ["HCCVOJI", "HCCVFEC", "HCCFCIH", "HCCVOPF",
-                        "HCCFCIV", "HCCTDAB", "HCCTDLT", "HCCBWDC",
-                        "HCCVOJB", "HCCTDAR", "HCCBWDB", "HCCTDPR",
-                        "HCCCTMA", "HCCFFIB", "HCCFCRB", "HCCVOTB",
-                        "HCCTRP", "HCCTRI", "HCCVOPC", "HCCVORD"]
-
-# Refined selection of failed parts that are not sorted out yet (may contain the good data at some point):
-parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
-                          "HCCTARA", "HCCBWRB", "HCCVORA", "HCCFIDH",
-                          "HCCFIUF", "HCCTRVD", "HCCIBBB", "HCCFCIY",
-                          "HCCTDST", "HCCBEGU", "HCCAPAC",
-                          "HCCBWMF", "HCCCVAB", "HCCFEII", "HCCFCIA",
-                          "HCCBMIA", "HCCFCRJ", "HCCVORB", "HCCVOIA",
-                          "HCCVOAA", "HCCFIDB", "HCCTDWA", "HCCFIDE",
-                          "HCCFCRC", "HCCFIUI", "HCCVRED",
-                          "HCCVREC", "HCCTDAG", "HCCFFIE", "HCCVFEA",
-                          "HCCFCRG", "HCCVUNC", "HCCTDAH", "HCCVFEB",
-                          "HCCVSEB", "HCCFEIA", "HCCVSEA", "HCCFCRI",
-                          "HCCVAED", "HCCTRV", "HCCVUNB"]
-
-
 # Create the Weibull plot with 2 different ways
 #weibull_2p(part_name)
 #generate_graph_local(part_name)
@@ -191,8 +147,8 @@ parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
 
 base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots"
 
-part_groups = [parts_to_be_edited_or_changed, parts_with_sus_dates,
-               parts_failed_selection]
+part_groups = [data_weibull.parts_to_be_edited_or_changed, data_weibull.parts_with_sus_dates,
+               data_weibull.parts_failed_selection]
 
 for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_dates", "parts_failed_selection"], part_groups):
     group_dir = os.path.join(base_dir, group_name)
@@ -202,14 +158,3 @@ for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_d
         save_path = os.path.join(group_dir, f"weibull_plot_{part}.png")
         weibull_2p(part, save_path=save_path)
 
-
-#for parts in part_groups:
-#    for part in parts:
-#        weibull_2p(part)
-
-    # Weißer Platzhalter-Plot zur Trennung
-#    fig, ax = plt.subplots()
-#    ax.set_facecolor('white')
-#    ax.set_xticks([])
-#    ax.set_yticks([])
-#    plt.show()

@@ -122,3 +122,46 @@ def get_csv_data(query='above 3'):
     print("Number of assets found: {0}".format(weibull_data.shape[0]))
 
     return weibull_data
+
+
+# Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
+parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCCFCIH","HCCTARA",
+                "HCCBWRB","HCCVORA","HCCFIDH","HCCVOPF","HCCFIUF","HCCTGXA","HCCTRVD","HCCFCIV",
+                'HCCIBBB',"HCCFIUB","HCCFIUC","HCCFCIY","HCCTDAB","HCCVOPC","HCCTDST",
+                "HCCBEGU","HCCAPAC","HCCBWMF",'HCCCVAB',"HCCVOPA","HCCTDLT","HCCFEII","HCCFCIA",
+                "HCCBMIA","HCCFCRJ","HCCBWDC","HCCFFIC","HCCVORB","HCCVOJB","HCCVOIA","HCCVOAA",
+                "HCCFIDB","HCCTDWA","HCCFIDE","HCCVORD","HCCVOGE","HCCTDAR","HCCBWDB","HCCTDPR",
+                "HCCFCRC",'HCCFIUI',"HCCVRED","HCCVREC","HCCTDAG","HCCCTMA","HCCFFIE","HCCVFEA",
+                "HCCTDET","HCCFCRG","HCCVUNC","HCCVSWB","HCCTDAH","HCCVFEB","HCCTRVA","HCCVSEB",
+                "HCCFEIA","HCCFISA","HCCVSEA","HCCFCRI","HCCVAED","HCCFFIB","HCCFCRB",'HCCVUEB',
+                'HCCVUEA',"HCCVSWA","HCCVOTB","HCCVFWA","HCCTRP","HCCTRV",
+                "HCCBWRE","HCCTRI","HCCVUNB",'HCCFCRA',"HCCFFIA"]
+# parts with only '...' are not findable in the Catalogue --> out of order
+
+# Excluded because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB", "HCCTRVA", "HCCBWRE", "HCCFCRA", "HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"
+
+# Refined selection of failed parts that should presumably be edited or the failures should be changed to suspended:
+parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFFIC", "HCCTDET", "HCCFISA",
+                                 "HCCVUEA", "HCCVSWA", "HCCVFWA", "HCCFFIA",
+                                 "HCCVOGE"]
+
+# Refined selection of failed parts that contains failures with interesting dates that needs to be checked:
+parts_with_sus_dates = ["HCCVOJI", "HCCVFEC", "HCCFCIH", "HCCVOPF",
+                        "HCCFCIV", "HCCTDAB", "HCCTDLT", "HCCBWDC",
+                        "HCCVOJB", "HCCTDAR", "HCCBWDB", "HCCTDPR",
+                        "HCCCTMA", "HCCFFIB", "HCCFCRB", "HCCVOTB",
+                        "HCCTRP", "HCCTRI", "HCCVOPC", "HCCVORD"]
+
+# Refined selection of failed parts that are not sorted out yet (may contain the good data at some point):
+parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
+                          "HCCTARA", "HCCBWRB", "HCCVORA", "HCCFIDH",
+                          "HCCFIUF", "HCCTRVD", "HCCIBBB", "HCCFCIY",
+                          "HCCTDST", "HCCBEGU", "HCCAPAC",
+                          "HCCBWMF", "HCCCVAB", "HCCFEII", "HCCFCIA",
+                          "HCCBMIA", "HCCFCRJ", "HCCVORB", "HCCVOIA",
+                          "HCCVOAA", "HCCFIDB", "HCCTDWA", "HCCFIDE",
+                          "HCCFCRC", "HCCFIUI", "HCCVRED",
+                          "HCCVREC", "HCCTDAG", "HCCFFIE", "HCCVFEA",
+                          "HCCFCRG", "HCCVUNC", "HCCTDAH", "HCCVFEB",
+                          "HCCVSEB", "HCCFEIA", "HCCVSEA", "HCCFCRI",
+                          "HCCVAED", "HCCTRV", "HCCVUNB"]
