@@ -80,6 +80,7 @@ def weibull_2p(part, save_path=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    plt.figure()
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
@@ -156,5 +157,4 @@ for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_d
 
     for part in parts:
         save_path = os.path.join(group_dir, f"weibull_plot_{part}.png")
-        weibull_2p(part, save_path=save_path)
-
+        weibull_2p(part)    #, save_path=save_path)
