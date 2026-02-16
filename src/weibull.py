@@ -14,9 +14,9 @@ import os
 import warnings
 import data_weibull
 from data_weibull import get_data
-#from data_weibull import get_all_data
-#from data_weibull import get_parts
-#from data_weibull import get_csv_data
+from data_weibull import get_all_data
+from data_weibull import get_parts
+from data_weibull import get_csv_data
 
 
 #old library and current state in the HIT Dashboard
@@ -124,7 +124,7 @@ def weibull_fit_best(part):
 
     wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=False, print_results=True,
-                        method='MLE',
+                        method='MLE', optimizer='Best',
                         show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=False,
                         exclude=['Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P',
                                  'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
@@ -148,8 +148,7 @@ part_name = 'HCCVREC'    #'HCCVAED'
 
 base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots"
 
-part_groups = [data_weibull.parts_to_be_edited_or_changed, data_weibull.parts_with_sus_dates,
-               data_weibull.parts_failed_selection]
+part_groups = [data_weibull.parts_to_be_edited_or_changed, data_weibull.parts_with_sus_dates, data_weibull.parts_failed_selection]
 
 for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_dates", "parts_failed_selection"], part_groups):
     group_dir = os.path.join(base_dir, group_name)
@@ -157,4 +156,4 @@ for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_d
 
     for part in parts:
         save_path = os.path.join(group_dir, f"weibull_plot_{part}.png")
-        weibull_2p(part)    #, save_path=save_path)
+        weibull_2p(part)#, save_path=save_path)

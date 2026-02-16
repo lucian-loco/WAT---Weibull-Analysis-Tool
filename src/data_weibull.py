@@ -99,7 +99,7 @@ def get_data(part):
 #Todo limit of the minimum failures and minimum distinct failures need to be adjusted | insert rule whether even with 2 distinct failures but many failure times at this times --> no good data
 
     if len(failures) < 2:
-        raise RuntimeError('Not enough failures (more than 4) in data for "{0}"'.format(part))
+        raise RuntimeError('Not enough failures (more than 2) in data for "{0}"'.format(part))
     elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
         raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
     elif len(failures) < 4:
@@ -152,18 +152,18 @@ parts_failed = ["HCCFIRD","HCCVOJI","HCCFIOH","HCCVOJD","HCCBWMB","HCCVFEC","HCC
 # parts with only '...' are not findable in the Catalogue --> out of order
 
 # Excluded because Weibull plot not possible: "HCCVRSA", "HCCBWRF", "HCCVBRB", "HCCFIUB", "HCCTRVA", "HCCBWRE", "HCCFCRA", "HCCVOPA", "HCCVUEB", "HCCTGXA", "HCCFIUC"
+#                                             "HCCTDET", "HCCFFIC", "HCCVOGE", "HCCVOJI", "HCCFCIH", "HCCVOPF", "HCCTDLT", "HCCTDPR", "HCCVOPC",
 
 # Refined selection of failed parts that should presumably be edited or the failures should be changed to suspended:
-parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFFIC", "HCCTDET", "HCCFISA",
-                                 "HCCVUEA", "HCCVSWA", "HCCVFWA", "HCCFFIA",
-                                 "HCCVOGE"]
+parts_to_be_edited_or_changed = ["HCCVSWB", "HCCFISA",
+                                 "HCCVUEA", "HCCVSWA", "HCCVFWA", "HCCFFIA"]
 
 # Refined selection of failed parts that contains failures with interesting dates that needs to be checked:
-parts_with_sus_dates = ["HCCVOJI", "HCCVFEC", "HCCFCIH", "HCCVOPF",
-                        "HCCFCIV", "HCCTDAB", "HCCTDLT", "HCCBWDC",
-                        "HCCVOJB", "HCCTDAR", "HCCBWDB", "HCCTDPR",
+parts_with_sus_dates = ["HCCVFEC",
+                        "HCCFCIV", "HCCTDAB", "HCCBWDC",
+                        "HCCVOJB", "HCCTDAR", "HCCBWDB",
                         "HCCCTMA", "HCCFFIB", "HCCFCRB", "HCCVOTB",
-                        "HCCTRP", "HCCTRI", "HCCVOPC", "HCCVORD"]
+                        "HCCTRP", "HCCTRI", "HCCVORD"]
 
 # Refined selection of failed parts that are not sorted out yet (may contain the good data at some point):
 parts_failed_selection = ["HCCFIRD", "HCCFIOH", "HCCVOJD", "HCCBWMB",
