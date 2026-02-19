@@ -1,24 +1,27 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
+from scipy.stats import goodness_of_fit
+
+import data_weibull
 from predictr import Analysis
+from data_weibull import get_data
+from data_weibull import get_parts
+from data_weibull import get_all_data
+from data_weibull import get_csv_data
+from reliability.Fitters import Fit_Everything
 from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
-from reliability.Fitters import Fit_Weibull_Mixture
 from reliability.Fitters import Fit_Weibull_CR
+from reliability.Fitters import Fit_Weibull_Mixture
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Other_functions import make_right_censored_data
-#from reliability.Probability_plotting import Weibull_probability_plot
-from reliability.Fitters import Fit_Everything
 import matplotlib.pyplot as plt
 import io
+import pandas as pd
 import numpy as np
 import os
 import warnings
-import data_weibull
-from data_weibull import get_data
-from data_weibull import get_all_data
-from data_weibull import get_parts
-from data_weibull import get_csv_data
+
 
 
 #old library and current state in the HIT Dashboard
@@ -305,11 +308,13 @@ def weibull_cr(part, save_path=None):
 
 
 #-----------------------------------------------------------------------------------------------------------------------
-# Function for fitting the data to every available Weibull distribution --> AICc and BIC as result
+# Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_fit_best(part):
+def weibull_fit_best(part, sort_by='AICc'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
+
+    warnings.filterwarnings("ignore", category=FutureWarning, message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated")
 
     data = get_data(part)
 
@@ -319,8 +324,6 @@ def weibull_fit_best(part):
 
     if failure_size < 4:
         raise RuntimeError('Not enough failures (more than 4) to perform Weibull in data for "{0}"'.format(part))
-    elif failure_size < 20:
-        warnings.warn('Less than 20 failures in total! It is highly recommended not to use the Weibull Mixture or Weibull CR model.', RuntimeWarning)
 
     # Prevent zeros in the right censored data
     if any(t == 0 for t in data['suspensions']):
@@ -333,17 +336,34 @@ def weibull_fit_best(part):
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
+    if failure_size < 20:
+        warnings.warn(
+            'Less than 20 failures in total! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
+            'Therefore, these models will not be used.', RuntimeWarning)
+
+        exclude = ['Weibull_Mixture', 'Weibull_CR', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
+                   'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
+                   'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+
+    else:
+        exclude = ['Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
+                   'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
+                   'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+
     wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
-                        sort_by='AICc',
+                        sort_by=sort_by,
                         show_probability_plot=False,
-                        show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=False,
-                        exclude=['Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P', 'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P',
-                                 'Loglogistic_3P', 'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P'],
-                        print_results=True,
+                        show_histogram_plot=False, show_PP_plot=False,
+                        show_best_distribution_probability_plot=False,
+                        exclude=exclude,
+                        print_results=False,
                         method='MLE', optimizer='Best',
                         )
 
+    wb_data_fit_all = wb.results
+    #print(wb_data_fit_all.to_string())
 
+    return wb_data_fit_all
 
 
 #ToDo implement of different libraries
@@ -361,8 +381,10 @@ part_name = 'HCCVSEA'
 #weibull_fit_best(part_name)
 #weibull_mixture(part=part_name)
 
-for weibull_distribution in weibull_distributions:
-    weibull_distribution(part=part_name)
+# for weibull_distribution in weibull_distributions:
+#     weibull_distribution(part=part_name)
+
+
 
 
 #base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots"
