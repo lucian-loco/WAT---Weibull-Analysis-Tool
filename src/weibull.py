@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
-from scipy.stats import goodness_of_fit
-
 import data_weibull
 from predictr import Analysis
 from data_weibull import get_data
@@ -15,12 +13,12 @@ from reliability.Fitters import Fit_Weibull_CR
 from reliability.Fitters import Fit_Weibull_Mixture
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Other_functions import make_right_censored_data
-import matplotlib.pyplot as plt
 import io
-import pandas as pd
-import numpy as np
 import os
 import warnings
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 
@@ -187,30 +185,6 @@ def weibull_mixture(part, save_path=None):
 
 # ToDo Confidence Interval for Weibull Mixture
 
-    # # Bootstrap parameter
-    # b = 500
-    #
-    # cdf_boot = []
-    #
-    # for b in range(b):
-    #     simulated = wb.distribution.random_samples(sample_size)
-    #
-    #     try:
-    #         fit_b = Fit_Weibull_Mixture(failures=simulated, show_probability_plot=False)
-    #
-    #         cdf_boot.append(
-    #             fit_b.distribution.CDF(t)
-    #         )
-    #
-    #     except:
-    #         continue  # falls Fit numerisch nicht konvergiert
-    #
-    # cdf_boot = np.array(cdf_boot)
-    #
-    # # 4. Quantile berechnen
-    # lower = np.percentile(cdf_boot, 2.5, axis=0)
-    # upper = np.percentile(cdf_boot, 97.5, axis=0)
-
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
@@ -268,30 +242,6 @@ def weibull_cr(part, save_path=None):
 
 # ToDo Confidence Interval for Weibull Competing Risks
 
-    # # Bootstrap parameter
-    # b = 500
-    #
-    # cdf_boot = []
-    #
-    # for b in range(b):
-    #     simulated = wb.distribution.random_samples(sample_size)
-    #
-    #     try:
-    #         fit_b = Fit_Weibull_Mixture(failures=simulated, show_probability_plot=False)
-    #
-    #         cdf_boot.append(
-    #             fit_b.distribution.CDF(t)
-    #         )
-    #
-    #     except:
-    #         continue  # falls Fit numerisch nicht konvergiert
-    #
-    # cdf_boot = np.array(cdf_boot)
-    #
-    # # 4. Quantile berechnen
-    # lower = np.percentile(cdf_boot, 2.5, axis=0)
-    # upper = np.percentile(cdf_boot, 97.5, axis=0)
-
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
@@ -341,8 +291,7 @@ def weibull_fit_best(part, sort_by='AICc'):
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
     if failure_size < 20:
-        warnings.warn(
-            'Less than 20 failures in total! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
+        warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
             'Therefore, these models will not be used.', RuntimeWarning)
 
         exclude = ['Weibull_Mixture', 'Weibull_CR', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
@@ -365,12 +314,56 @@ def weibull_fit_best(part, sort_by='AICc'):
                         )
 
     wb_data_fit_all = wb.results
+    wb_best_distribution_name = wb.best_distribution_name
     #print(wb_data_fit_all.to_string())
 
-    return wb_data_fit_all
+    return wb_data_fit_all, wb_best_distribution_name
 
 
-#ToDo implement of different libraries
+#-----------------------------------------------------------------------------------------------------------------------
+# Perform a Weibull Analysis to the HITDB Data by using different Weibull distributions
+#-----------------------------------------------------------------------------------------------------------------------
+part_names_hit = get_parts(failure_threshold=4, distinct_threshold=2)
+
+parts_data_fit_all = []
+parts_best_distribution_name = []
+
+for part in part_names_hit:
+    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by='AICc')
+
+    wb_data_fit_all['PART'] = part
+    wb_best_distribution_name = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [wb_best_distribution_name]})
+
+    parts_data_fit_all.append(wb_data_fit_all)
+    parts_best_distribution_name.append(wb_best_distribution_name)
+
+parts_data_fit_all = pd.concat(parts_data_fit_all, ignore_index=True)
+parts_data_fit_all = {name: group for name, group in parts_data_fit_all.groupby('PART')}
+
+parts_best_distribution_name = pd.concat(parts_best_distribution_name, ignore_index=True)
+
+print(parts_data_fit_all)
+print(parts_best_distribution_name)
+
+
+for part in wb_best_distribution_name['PART']:
+    if wb_best_distribution_name.loc[wb_best_distribution_name['PART'] == part, 'BEST_DISTRIBUTION'].values[0] == 'Weibull_2P':
+        weibull_2p(part=part)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ToDo implementation of different libraries
 
 #ToDo implement own function for plotting the data out of the several distribution functions
 
