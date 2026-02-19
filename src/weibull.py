@@ -185,6 +185,8 @@ def weibull_mixture(part, save_path=None):
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
+# ToDo Confidence Interval for Weibull Mixture
+
     # # Bootstrap parameter
     # b = 500
     #
@@ -263,6 +265,8 @@ def weibull_cr(part, save_path=None):
                         CI=0.95,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
+
+# ToDo Confidence Interval for Weibull Competing Risks
 
     # # Bootstrap parameter
     # b = 500
