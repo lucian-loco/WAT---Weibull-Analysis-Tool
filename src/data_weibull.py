@@ -101,7 +101,7 @@ def get_data(part):
     if len(failures) < 2:
         raise RuntimeError('Not enough failures (more than 2) in data for "{0}"'.format(part))
     elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
-        raise RuntimeError('Not enough distinct failures in data for "{0}"'.format(part))
+        raise RuntimeError('Not enough distinct failures (more than 2) in data for "{0}"'.format(part))
     elif len(failures) < 4:
         warnings.warn('Less than 4 failures in total!', RuntimeWarning)
 
@@ -135,6 +135,7 @@ def get_csv_data(query='above 3'):
     weibull_data = {name: group for name, group in weibull_data.groupby('PART')}
 
     return weibull_data
+
 
 
 # Every part-name with failures ≥ 4 that are distinct more than 2 times of the weibull_data
