@@ -50,7 +50,7 @@ def generate_graph(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_2p(part, save_path=None):
+def weibull_2p(part, ci=0.95, save_path=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -74,7 +74,7 @@ def weibull_2p(part, save_path=None):
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                         method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                        CI_type='reliability', CI=0.95,
+                        CI_type='reliability', CI=ci,
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
@@ -93,14 +93,18 @@ def weibull_2p(part, save_path=None):
     fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
-    plt.show()
-    print(f'Goodness of fit values for the Weibull 2P: \n {wb.goodness_of_fit} \n\n')
+        plt.close()
+    else:
+        plt.show()
+    # print(f'Goodness of fit values for the Weibull 2P: \n {wb.goodness_of_fit} \n\n')
+
+    return wb.results
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 3P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_3p(part, save_path=None):
+def weibull_3p(part, ci=0.95, save_path=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -124,14 +128,14 @@ def weibull_3p(part, save_path=None):
     wb = Fit_Weibull_3P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                         method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                        CI_type='reliability', CI=0.95,
+                        CI_type='reliability', CI=ci,
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
-    ax.set_xlabel('Time in days')
+    ax.set_xlabel(rf'Time in days minus failure free time $\gamma$={wb.gamma:.4f}')
     ax.set_ylabel('Failure probability')
     ax.set_ylim(0.001, 0.999)
     xmin, xmax = ax.get_xlim()
@@ -143,14 +147,18 @@ def weibull_3p(part, save_path=None):
     fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
-    plt.show()
-    print(f'Goodness of fit values for the Weibull 3P: \n {wb.goodness_of_fit} \n\n')
+        plt.close()
+    else:
+        plt.show()
+    # print(f'Goodness of fit values for the Weibull 3P: \n {wb.goodness_of_fit} \n\n')
+
+    return wb.results
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_mixture(part, save_path=None):
+def weibull_mixture(part, ci=0.95, save_path=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -179,7 +187,7 @@ def weibull_mixture(part, save_path=None):
     wb = Fit_Weibull_Mixture(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                         optimizer='best',                                  # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                        CI=0.95,
+                        CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
@@ -200,14 +208,18 @@ def weibull_mixture(part, save_path=None):
     fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
-    plt.show()
-    print(f'Goodness of fit values for the Weibull Mixture: \n {wb.goodness_of_fit} \n\n')
+        plt.close()
+    else:
+        plt.show()
+    # print(f'Goodness of fit values for the Weibull Mixture: \n {wb.goodness_of_fit} \n\n')
+
+    return wb.results
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Competing Risks with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_cr(part, save_path=None):
+def weibull_cr(part, ci=0.95, save_path=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -236,7 +248,7 @@ def weibull_cr(part, save_path=None):
     wb = Fit_Weibull_CR(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                         optimizer='best',                                  # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                        CI=0.95,
+                        CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})'
                         )
 
@@ -257,8 +269,12 @@ def weibull_cr(part, save_path=None):
     fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
-    plt.show()
-    print(f'Goodness of fit values for the Weibull CR: \n {wb.goodness_of_fit} \n\n')
+        plt.close()
+    else:
+        plt.show()
+    # print(f'Goodness of fit values for the Weibull CR: \n {wb.goodness_of_fit} \n\n')
+
+    return wb.results
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -292,7 +308,7 @@ def weibull_fit_best(part, sort_by='AICc'):
 
     if failure_size < 20:
         warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
-            'Therefore, these models will not be used.', RuntimeWarning)
+            'Therefore, these models will not be used for the fitting.', RuntimeWarning)
 
         exclude = ['Weibull_Mixture', 'Weibull_CR', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
@@ -321,39 +337,128 @@ def weibull_fit_best(part, sort_by='AICc'):
 
 
 #-----------------------------------------------------------------------------------------------------------------------
-# Perform a Weibull Analysis to the HITDB Data by using different Weibull distributions
+# Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-part_names_hit = get_parts(failure_threshold=4, distinct_threshold=2)
+def ask_threshold(name: str, default: int):
+    while True:
+        user_input = input(f"Enter {name} and press enter (Default value: {default}): ").strip()
+        if user_input == "":
+            return default
+        try:
+            value = int(user_input)
+            if value > 0:
+                return value
+            else:
+                print("  → Please enter a positive number.")
+        except ValueError:
+            print("  → Invalid input, please enter an integer..")
 
-parts_data_fit_all = []
-parts_best_distribution_name = []
+# ToDo Include the sort_by variable into the ask function, whether AICc or BIC should be used to identify the best_distribution --> edit the weibull_fit_best input parameter
+# ToDo Include the CI interval into the ask function --> edit the fitter_map
+def automated_weibull():
+    failure_threshold = ask_threshold("Failure threshold", default=4)
+    distinct_threshold = ask_threshold("Distinct threshold", default=2)
 
-for part in part_names_hit:
+    print(f"\n→ Starting search for parts with failure_threshold={failure_threshold} and distinct_threshold={distinct_threshold}\n")
+
+    part_names_hit = get_parts(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
+
+    print(f"\n→ Starting analysis for these parts...")
+
+    parts_data_fit_all = []
+    parts_best_distribution_names = []
+
+    for part in part_names_hit:
+        wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by='AICc')
+
+        wb_data_fit_all['PART'] = part
+
+        wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [wb_best_distribution_name]})
+
+        parts_data_fit_all.append(wb_data_fit_all)
+        parts_best_distribution_names.append(wb_best_distribution_row)
+
+    parts_data_fit_all = pd.concat(parts_data_fit_all, ignore_index=True)
+    parts_data_fit_all = {name: group for name, group in parts_data_fit_all.groupby('PART')}
+
+    parts_best_distribution_names = pd.concat(parts_best_distribution_names, ignore_index=True)
+
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=0.95, save_path=None),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=0.95, save_path=None),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=0.95, save_path=None),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=0.95, save_path=None)}
+
+    parts_fit_results = {}
+
+    for _, row in parts_best_distribution_names.iterrows():
+        part = row['PART']
+        best_distribution = row['BEST_DISTRIBUTION']
+
+        fit_function = fitter_map.get(best_distribution)
+
+        if fit_function is None:
+            warnings.warn(f'Unknown distribution "{best_distribution}" for "{part}" --> skipped.', RuntimeWarning)
+            continue
+
+        parts_fit_results[part] = fit_function(part)
+
+    print(f"\nThis are the results of the automated Weibull analysis: ", parts_fit_results)
+
+    return parts_fit_results
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Perform a manual Weibull Analysis to one specific part by using different Weibull distributions
+#-----------------------------------------------------------------------------------------------------------------------
+def manual_weibull(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
+
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=0.95, save_path=None),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=0.95, save_path=None),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=0.95, save_path=None),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=0.95, save_path=None)}
+
     wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by='AICc')
 
-    wb_data_fit_all['PART'] = part
-    wb_best_distribution_name = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [wb_best_distribution_name]})
+    fit_function = fitter_map.get(wb_best_distribution_name)
 
-    parts_data_fit_all.append(wb_data_fit_all)
-    parts_best_distribution_name.append(wb_best_distribution_name)
+    if fit_function is None:
+        warnings.warn(f'Unknown distribution "{wb_best_distribution_name}" for "{part}" --> skipped.', RuntimeWarning)
+        return None
 
-parts_data_fit_all = pd.concat(parts_data_fit_all, ignore_index=True)
-parts_data_fit_all = {name: group for name, group in parts_data_fit_all.groupby('PART')}
+    wb_results = fit_function(part)
 
-parts_best_distribution_name = pd.concat(parts_best_distribution_name, ignore_index=True)
-
-print(parts_data_fit_all)
-print(parts_best_distribution_name)
+    return wb_results, wb_data_fit_all
 
 
-for part in wb_best_distribution_name['PART']:
-    if wb_best_distribution_name.loc[wb_best_distribution_name['PART'] == part, 'BEST_DISTRIBUTION'].values[0] == 'Weibull_2P':
-        weibull_2p(part=part)
+#-----------------------------------------------------------------------------------------------------------------------
+# Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
+#-----------------------------------------------------------------------------------------------------------------------
+def manual_weibull_dashboard(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
 
+    buffer = io.BytesIO()   # Save plot in RAM
 
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=0.95, save_path=buffer),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=0.95, save_path=buffer),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=0.95, save_path=buffer),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=0.95, save_path=buffer)}
 
+    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by='AICc')
 
+    fit_function = fitter_map.get(wb_best_distribution_name)
 
+    if fit_function is None:
+        warnings.warn(f'Unknown distribution "{wb_best_distribution_name}" for "{part}" --> skipped.', RuntimeWarning)
+        return None
+
+    wb_results = fit_function(part)
+
+    buffer.seek(0)
+
+    return buffer
 
 
 
