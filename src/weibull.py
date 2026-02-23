@@ -321,7 +321,7 @@ def weibull_fit_best(part, sort_by='AICc'):
 
     return wb_data_fit_all, wb_best_distribution_name
 
-
+# ToDo Implement sort_by with comparison between AICc and BIC, if decision would be the same take the result if decision would be different take the manual given preference of the original input
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
