@@ -349,7 +349,7 @@ def ask_sort_by(default: str = 'BIC'):
     """
     valid_options = ['AICc', 'BIC']
     while True:
-        user_input = input(f"Enter sort method ({valid_options}) and press enter (Default value: {default}): ").strip()
+        user_input = input(f"Enter sort method {valid_options} and press enter (Default value: {default}): ").strip()
         if user_input == "":
             return default
         if user_input in valid_options:
@@ -382,14 +382,16 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
     If both agree → take that result.
     If they disagree → fall back to the user's sort_by preference.
     """
-    best_aicc = df.loc[df['AICc'].idxmin(), 'Distribution']
-    best_bic  = df.loc[df['BIC'].idxmin(), 'Distribution']
+    df = df.reset_index(drop=True)
+
+    best_aicc = df.at[df['AICc'].idxmin(), 'Distribution']
+    best_bic  = df.at[df['BIC'].idxmin(), 'Distribution']
 
     if best_aicc == best_bic:
         return best_aicc
     else:
-        resolved = df.loc[df[sort_by].idxmin(), 'Distribution']
-        print(f'For {part}: ⚠ AICc→{best_aicc} vs BIC→{best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
+        resolved = df.at[df[sort_by].idxmin(), 'Distribution']
+        print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
         return resolved
 
 
@@ -448,7 +450,8 @@ def automated_weibull():
 
         parts_fit_results[part] = fit_function(part)
 
-    print(f"\nThis are the results of the automated Weibull analysis: \n", parts_fit_results)
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(f"\nThis are the results of the automated Weibull analysis: \n", parts_fit_results)
 
     return parts_fit_results
 
@@ -462,6 +465,8 @@ def manual_weibull(part):
 
     sort_by = ask_sort_by(default='AICc')
     ci = ask_ci(default=0.95)
+
+    print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
     fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=None),
                   'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=None),
@@ -482,7 +487,7 @@ def manual_weibull(part):
 
     wb_results = fit_function(part)
 
-    return wb_results, wb_data_fit_all
+    return wb_results, wb_data_fit_all, wb_best_distribution_name
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -494,19 +499,23 @@ def generate_graph(part):
 
     buffer = io.BytesIO()   # Save plot in RAM
 
+    sort_by = 'AICc'
+
     fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=0.95, save_path=buffer),
                   'Weibull_3P':         lambda p: weibull_3p(part=p, ci=0.95, save_path=buffer),
                   'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=0.95, save_path=buffer),
                   'Weibull_CR':         lambda p: weibull_cr(part=p, ci=0.95, save_path=buffer)}
 
-    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by='AICc')
+    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
 
-    fit_function = fitter_map.get(wb_best_distribution_name)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+
+    fit_function = fitter_map.get(compared_best)
 
     if fit_function is None:
         with warnings.catch_warnings():
             warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn(f'Unknown distribution "{wb_best_distribution_name}" for "{part}" --> skipped.', RuntimeWarning)
+            warnings.warn(f'Unknown distribution "{compared_best}" for "{part}" --> skipped.', RuntimeWarning)
         return None
 
     wb_results = fit_function(part)
@@ -515,11 +524,12 @@ def generate_graph(part):
     return buffer
 
 
-data, name = weibull_fit_best('HCCVSEA')
+# data, _, name = manual_weibull('HCCVSEA')
+data = automated_weibull()
 
-print(f'Name of best distribution: {name}')
 with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-    print(f'\nResult data of the weibull_fit_best function:\n ', data)
+    # print(f'\nResult data of the {name} fit:\n ', data)
+    print(f'\nResult data of the fit:\n ', data)
 
 
 
