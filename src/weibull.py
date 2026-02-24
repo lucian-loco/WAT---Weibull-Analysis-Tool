@@ -263,7 +263,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_fit_best(part, sort_by='AICc'):
+def weibull_fit_best(part, sort_by='BIC'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -321,11 +321,14 @@ def weibull_fit_best(part, sort_by='AICc'):
 
     return wb_data_fit_all, wb_best_distribution_name
 
-# ToDo Implement sort_by with comparison between AICc and BIC, if decision would be the same take the result if decision would be different take the manual given preference of the original input
+
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 def ask_threshold(name: str, default: int):
+    """
+    Asks the user to choose the threshold for the failure count and the distinct failures.
+    """
     while True:
         user_input = input(f"Enter {name} and press enter (Default value: {default}): ").strip()
         if user_input == "":
@@ -340,7 +343,10 @@ def ask_threshold(name: str, default: int):
             print("  → Invalid input, please enter an integer..")
 
 
-def ask_sort_by(default: str = 'AICc'):
+def ask_sort_by(default: str = 'BIC'):
+    """
+    Asks the user to choose the sort by.
+    """
     valid_options = ['AICc', 'BIC']
     while True:
         user_input = input(f"Enter sort method ({valid_options}) and press enter (Default value: {default}): ").strip()
@@ -353,6 +359,9 @@ def ask_sort_by(default: str = 'AICc'):
 
 
 def ask_ci(default: float = 0.95):
+    """
+    Asks the user to choose the ci level.
+    """
     while True:
         user_input = input(f"Enter confidence interval (0-1) and press enter (Default value: {default}): ").strip()
         if user_input == "":
@@ -365,6 +374,23 @@ def ask_ci(default: float = 0.95):
                 print("  → Please enter a value strictly between 0 and 1.")
         except ValueError:
             print("  → Invalid input, please enter a number (e.g. 0.95).")
+
+
+def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
+    """
+    Determines the best distribution by comparing AICc and BIC winners.
+    If both agree → take that result.
+    If they disagree → fall back to the user's sort_by preference.
+    """
+    best_aicc = df.loc[df['AICc'].idxmin(), 'Distribution']
+    best_bic  = df.loc[df['BIC'].idxmin(), 'Distribution']
+
+    if best_aicc == best_bic:
+        return best_aicc
+    else:
+        resolved = df.loc[df[sort_by].idxmin(), 'Distribution']
+        print(f'For {part}: ⚠ AICc→{best_aicc} vs BIC→{best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
+        return resolved
 
 
 def automated_weibull():
@@ -387,7 +413,9 @@ def automated_weibull():
 
         wb_data_fit_all['PART'] = part
 
-        wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [wb_best_distribution_name]})
+        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+
+        wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
 
         parts_data_fit_all.append(wb_data_fit_all)
         parts_best_distribution_names.append(wb_best_distribution_row)
@@ -420,7 +448,7 @@ def automated_weibull():
 
         parts_fit_results[part] = fit_function(part)
 
-    print(f"\nThis are the results of the automated Weibull analysis: ", parts_fit_results)
+    print(f"\nThis are the results of the automated Weibull analysis: \n", parts_fit_results)
 
     return parts_fit_results
 
@@ -442,12 +470,14 @@ def manual_weibull(part):
 
     wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
 
-    fit_function = fitter_map.get(wb_best_distribution_name)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+
+    fit_function = fitter_map.get(compared_best)
 
     if fit_function is None:
         with warnings.catch_warnings():
             warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn(f'Unknown distribution "{wb_best_distribution_name}" for "{part}" --> skipped.', RuntimeWarning)
+            warnings.warn(f'Unknown distribution "{compared_best}" for "{part}" --> skipped.', RuntimeWarning)
         return None
 
     wb_results = fit_function(part)
@@ -485,7 +515,11 @@ def generate_graph(part):
     return buffer
 
 
-automated_weibull()
+data, name = weibull_fit_best('HCCVSEA')
+
+print(f'Name of best distribution: {name}')
+with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    print(f'\nResult data of the weibull_fit_best function:\n ', data)
 
 
 
