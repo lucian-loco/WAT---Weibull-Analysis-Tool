@@ -103,7 +103,7 @@ def get_data(part):
     elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
         raise RuntimeError('Not enough distinct failures (more than 2) in data for "{0}"'.format(part))
     elif len(failures) < 4:
-        warnings.warn('Less than 4 failures in total!', RuntimeWarning)
+        warnings.warn('Less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
 
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 

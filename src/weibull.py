@@ -451,9 +451,14 @@ def automated_weibull():
         parts_fit_results[part] = fit_function(part)
 
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(f"\nThis are the results of the automated Weibull analysis: \n", parts_fit_results)
+        print(f"\nThis are the results of the automated Weibull analysis:")
+        for part, df in parts_fit_results.items():
+            print(f"\n{'=' * 60}")
+            print(f"  {part}")
+            print(f"{'=' * 60}")
+            print(df.to_string(index=False))
 
-    return parts_fit_results
+    return parts_fit_results, parts_data_fit_all
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -524,12 +529,18 @@ def generate_graph(part):
     return buffer
 
 
-# data, _, name = manual_weibull('HCCVSEA')
-data = automated_weibull()
+# data, _, name = manual_weibull('HCCFISA')
+parts_data, data_all = automated_weibull()
 
 with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     # print(f'\nResult data of the {name} fit:\n ', data)
-    print(f'\nResult data of the fit:\n ', data)
+    print(f'\nFull result data of every part for every distribution:')
+    for part, df in data_all.items():
+        print(f"\n{'=' * 60}")
+        print(f"  {part}")
+        print(f"{'=' * 60}")
+        print(df.to_string(index=False))
+
 
 
 
