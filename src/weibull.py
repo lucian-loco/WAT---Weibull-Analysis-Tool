@@ -40,14 +40,14 @@ def weibull_2p(part, ci=0.95, save_path=None):
     if any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
 
     plt.figure()
-# ToDo Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
+# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
@@ -95,14 +95,14 @@ def weibull_3p(part, ci=0.95, save_path=None):
     if any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
 
     plt.figure()
-
+# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_3P(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
@@ -150,21 +150,21 @@ def weibull_mixture(part, ci=0.95, save_path=None):
         raise RuntimeError('Not enough failures (more than 4) to perform Weibull CR in data for "{0}"'.format(part))
     elif failure_size < 20:
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('Less than 20 failures in total! It is highly recommended to use another model if there are less than 20 failures.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
     if any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
 
     plt.figure()
-
+# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_Mixture(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
@@ -214,15 +214,15 @@ def weibull_cr(part, ci=0.95, save_path=None):
         raise RuntimeError('Not enough failures (more than 4) to perform Weibull CR in data for "{0}"'.format(part))
     elif failure_size < 20:
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('Less than 20 failures in total! It is highly recommended to use another model if there are less than 20 failures.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
     if any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
@@ -283,8 +283,8 @@ def weibull_fit_best(part, sort_by='BIC'):
     if any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
     if not data['suspensions']:
         data['suspensions'] = None
@@ -294,9 +294,9 @@ def weibull_fit_best(part, sort_by='BIC'):
 
     if failure_size < 20:
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
-                'Therefore, these models will not be used for the fitting.', RuntimeWarning)
+                'Therefore, these models will not be used for the fitting.', UserWarning)
 
         exclude = ['Weibull_Mixture', 'Weibull_CR', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',

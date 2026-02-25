@@ -50,8 +50,8 @@ def get_all_data(failure_threshold=4, distinct_threshold=2):
         raise RuntimeError(f'Requested less than 2 distinct failure times. Weibull Analysis not possible.')
     elif failure_threshold < 4:
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('Requested less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn('Requested less than 4 failures in total! The results should not be trusted.', UserWarning)
 
     data = []
 
@@ -111,8 +111,8 @@ def get_data(part):
         raise RuntimeError('Not enough distinct failures (more than 2) in data for "{0}"'.format(part))
     elif len(failures) < 4:
         with warnings.catch_warnings():
-            warnings.simplefilter('always', RuntimeWarning)
-            warnings.warn('Less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'Less than 4 failures in total for "{part}"! The results should not be trusted.', UserWarning)
 
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 
