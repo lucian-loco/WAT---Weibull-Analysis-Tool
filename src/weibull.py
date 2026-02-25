@@ -273,6 +273,7 @@ def weibull_fit_best(part, sort_by='BIC'):
     data = get_data(part)
 
     failure_size = len(data['failures'])
+    distinct_failure_count = len(set(data['failures']))
     # suspension_size = len(data['suspensions'])
     # sample_size = failure_size + suspension_size
 
@@ -292,16 +293,24 @@ def weibull_fit_best(part, sort_by='BIC'):
     # Weibull Analysis
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
-    if failure_size < 20:
+    if distinct_failure_count < 3:
+        with warnings.catch_warnings():
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'Less than 3 distinct failure times for "{part}"! It is not possible to fit the Weibull_3P, Weibull_Mixture and Weibull_CR. '
+                'Therefore, these models will not be used for the fitting.', UserWarning)
+
+        exclude = ['Weibull_3P', 'Weibull_CR', 'Weibull_Mixture', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
+                   'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
+                   'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+    elif failure_size < 20:
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
                 'Therefore, these models will not be used for the fitting.', UserWarning)
 
-        exclude = ['Weibull_Mixture', 'Weibull_CR', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
+        exclude = ['Weibull_CR', 'Weibull_Mixture', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
                    'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
-
     else:
         exclude = ['Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
