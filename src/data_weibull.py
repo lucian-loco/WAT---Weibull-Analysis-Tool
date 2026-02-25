@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import db_hitdata
 import pandas as pd
 import os
