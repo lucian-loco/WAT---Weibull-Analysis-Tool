@@ -11,7 +11,6 @@ from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
 from reliability.Fitters import Fit_Weibull_CR
 from reliability.Fitters import Fit_Weibull_Mixture
-from weibull_ci import to_weibull_y
 from weibull_ci import weibull_cr_fisher_bounds
 from weibull_ci import weibull_mixture_fisher_bounds
 #from reliability.Other_functions import distribution_explorer
@@ -58,7 +57,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
                         CI_type='reliability', CI=ci,
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.2f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
@@ -113,7 +112,7 @@ def weibull_3p(part, ci=0.95, save_path=None):
                         CI_type='reliability', CI=ci,
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f}, CI={ci:.2f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel(rf'Time in days minus failure free time $\gamma$={wb.gamma:.4f}')
@@ -175,26 +174,26 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, CI={ci:.2f})')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     ax.set_ylim(0.001, 0.999)
     xmin, xmax = ax.get_xlim()
+    xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.exp(np.linspace(xmin,xmax, 400))
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 400)
 
     lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
     if lower is not None and upper is not None:
         ax.fill_between(
-            np.log(xvals),
-            to_weibull_y(lower),
-            to_weibull_y(upper),
-            color="blue",
-            alpha=0.25,
-            label=f"{int(ci * 100)}% Fisher CI"
+            xvals,
+            lower,
+            upper,
+            alpha=0.3,
+            # label=f"{int(ci * 100)}% Fisher CI"
         )
     #-------------------------------------------------------------------------------------------------------------------
 
@@ -254,32 +253,26 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, CI={ci:.2f})')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     ax.set_ylim(0.001, 0.999)
     xmin, xmax = ax.get_xlim()
+    xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.exp(np.linspace(xmin, xmax, 400))
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 400)
 
-    lower, upper = weibull_cr_fisher_bounds(
-        fit=wb,
-        xvals=xvals,
-        failures=data['failures'],
-        right_censored=data['suspensions'],
-        CI=ci
-    )
+    lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
     if lower is not None and upper is not None:
         ax.fill_between(
-            np.log(xvals),
-            to_weibull_y(lower),
-            to_weibull_y(upper),
-            color="blue",
-            alpha=0.25,
-            label=f"{int(ci * 100)}% Fisher CI"
+            xvals,
+            lower,
+            upper,
+            alpha=0.3,
+            # label=f"{int(ci * 100)}% Fisher CI"
         )
     # -------------------------------------------------------------------------------------------------------------------
 
@@ -593,15 +586,20 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(f"{'=' * 60}")
         print(df.to_string(index=False))
 
-# Size of parts_fit_results (Dict of DataFrames)
-total_fit = sum(df.memory_usage(deep=True).sum() for df in parts_data.values())
-print(f"parts_fit_results: {total_fit / 1024:.1f} KB")
 
-# Size of parts_data_fit_all (Dict of DataFrames)
-total_all = sum(df.memory_usage(deep=True).sum() for df in data_all.values())
-print(f"parts_data_fit_all: {total_all / 1024:.1f} KB")
 
-print(f"Total RAM: {(total_fit + total_all) / 1024:.1f} KB")
+
+
+
+# # Size of parts_fit_results (Dict of DataFrames)
+# total_fit = sum(df.memory_usage(deep=True).sum() for df in parts_data.values())
+# print(f"parts_fit_results: {total_fit / 1024:.1f} KB")
+#
+# # Size of parts_data_fit_all (Dict of DataFrames)
+# total_all = sum(df.memory_usage(deep=True).sum() for df in data_all.values())
+# print(f"parts_data_fit_all: {total_all / 1024:.1f} KB")
+#
+# print(f"Total RAM: {(total_fit + total_all) / 1024:.1f} KB")
 
 
 

@@ -148,10 +148,6 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
 
     return lower, upper
 
-def to_weibull_y(F):
-    F = np.clip(F, 1e-9, 1 - 1e-9)
-    return np.log(-np.log(1.0 - F))
-
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Main functions
@@ -201,7 +197,8 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
     ])
 
     def neg_loglik(p):
-        return Fit_Weibull_Mixture.LL(p, T_f, T_rc)
+        val = Fit_Weibull_Mixture.LL(p, T_f, T_rc)
+        return val
 
     cov = _compute_covariance(neg_loglik, params, step=hess_step)
 
