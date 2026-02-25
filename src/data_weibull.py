@@ -46,6 +46,13 @@ def get_all_data(failure_threshold=4, distinct_threshold=2):
     if not (isinstance(distinct_threshold, int) and distinct_threshold >= 1):
         raise RuntimeError('Invalid distinct failure threshold "{0}", needs to be an integer and greater than or equal as 1'.format(distinct_threshold))
 
+    if distinct_threshold < 2:  # For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
+        raise RuntimeError(f'Requested less than 2 distinct failure times. Weibull Analysis not possible.')
+    elif failure_threshold < 4:
+        with warnings.catch_warnings():
+            warnings.simplefilter('always', RuntimeWarning)
+            warnings.warn('Requested less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
+
     data = []
 
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
@@ -103,7 +110,9 @@ def get_data(part):
     elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
         raise RuntimeError('Not enough distinct failures (more than 2) in data for "{0}"'.format(part))
     elif len(failures) < 4:
-        warnings.warn('Less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
+        with warnings.catch_warnings():
+            warnings.simplefilter('always', RuntimeWarning)
+            warnings.warn('Less than 4 failures in total! The results should not be trusted.', RuntimeWarning)
 
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 

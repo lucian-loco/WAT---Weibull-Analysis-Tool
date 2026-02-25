@@ -15,6 +15,7 @@ from reliability.Fitters import Fit_Weibull_Mixture
 #from reliability.Other_functions import make_right_censored_data
 import io
 import os
+import sys
 import warnings
 import numpy as np
 import pandas as pd
@@ -275,8 +276,8 @@ def weibull_fit_best(part, sort_by='BIC'):
     # suspension_size = len(data['suspensions'])
     # sample_size = failure_size + suspension_size
 
-    if failure_size < 4:
-        raise RuntimeError('Not enough failures (more than 4) to perform Weibull in data for "{0}"'.format(part))
+    if failure_size < 2:
+        raise RuntimeError('Not enough failures (more than 2) to perform Weibull in data for "{0}"'.format(part))
 
     # Prevent zeros in the right censored data
     if any(t == 0 for t in data['suspensions']):
@@ -335,10 +336,10 @@ def ask_threshold(name: str, default: int):
             return default
         try:
             value = int(user_input)
-            if value > 0:
+            if value > 1:
                 return value
             else:
-                print("  → Please enter a positive number.")
+                print("  → Please enter a positive number greater than 1.")
         except ValueError:
             print("  → Invalid input, please enter an integer..")
 
@@ -529,6 +530,9 @@ def generate_graph(part):
     return buffer
 
 
+#***********************************************************************************************************************
+# Start the script
+#***********************************************************************************************************************
 # data, _, name = manual_weibull('HCCFISA')
 parts_data, data_all = automated_weibull()
 
@@ -541,7 +545,15 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(f"{'=' * 60}")
         print(df.to_string(index=False))
 
+# Size of parts_fit_results (Dict of DataFrames)
+total_fit = sum(df.memory_usage(deep=True).sum() for df in parts_data.values())
+print(f"parts_fit_results: {total_fit / 1024:.1f} KB")
 
+# Size of parts_data_fit_all (Dict of DataFrames)
+total_all = sum(df.memory_usage(deep=True).sum() for df in data_all.values())
+print(f"parts_data_fit_all: {total_all / 1024:.1f} KB")
+
+print(f"Total RAM: {(total_fit + total_all) / 1024:.1f} KB")
 
 
 
