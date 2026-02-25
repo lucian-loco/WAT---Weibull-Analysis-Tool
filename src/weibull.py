@@ -11,6 +11,9 @@ from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
 from reliability.Fitters import Fit_Weibull_CR
 from reliability.Fitters import Fit_Weibull_Mixture
+from weibull_ci import to_weibull_y
+from weibull_ci import weibull_cr_fisher_bounds
+from weibull_ci import weibull_mixture_fisher_bounds
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Other_functions import make_right_censored_data
 import io
@@ -172,15 +175,30 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-# ToDo Confidence Interval for Weibull Mixture
-
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f})')
-    plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     ax.set_ylim(0.001, 0.999)
     xmin, xmax = ax.get_xlim()
+
+    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
+    xvals = np.exp(np.linspace(xmin,xmax, 400))
+
+    lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
+
+    if lower is not None and upper is not None:
+        ax.fill_between(
+            np.log(xvals),
+            to_weibull_y(lower),
+            to_weibull_y(upper),
+            color="blue",
+            alpha=0.25,
+            label=f"{int(ci * 100)}% Fisher CI"
+        )
+    #-------------------------------------------------------------------------------------------------------------------
+
+    plt.legend(loc='upper left')
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
     labels = ax.get_xticklabels()
     for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
@@ -236,15 +254,36 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-# ToDo Confidence Interval for Weibull Competing Risks
-
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f})')
-    plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     ax.set_ylim(0.001, 0.999)
     xmin, xmax = ax.get_xlim()
+
+    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
+    xvals = np.exp(np.linspace(xmin, xmax, 400))
+
+    lower, upper = weibull_cr_fisher_bounds(
+        fit=wb,
+        xvals=xvals,
+        failures=data['failures'],
+        right_censored=data['suspensions'],
+        CI=ci
+    )
+
+    if lower is not None and upper is not None:
+        ax.fill_between(
+            np.log(xvals),
+            to_weibull_y(lower),
+            to_weibull_y(upper),
+            color="blue",
+            alpha=0.25,
+            label=f"{int(ci * 100)}% Fisher CI"
+        )
+    # -------------------------------------------------------------------------------------------------------------------
+
+    plt.legend(loc='upper left')
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
     labels = ax.get_xticklabels()
     for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
