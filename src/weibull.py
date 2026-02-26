@@ -184,7 +184,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 400)
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 800)
 
     lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
@@ -263,7 +263,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 400)
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 800)
 
     lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
@@ -597,19 +597,21 @@ def generate_graph(part):
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
-# data, _, name = manual_weibull('HCCFISA')
-parts_data, data_all = automated_weibull()
+# # data, _, name = manual_weibull('HCCFISA')
+# parts_data, data_all = automated_weibull()
+#
+# with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+#     # print(f'\nResult data of the {name} fit:\n ', data)
+#     print(f'\nFull result data of every part for every distribution:')
+#     for part, df in data_all.items():
+#         print(f"\n{'=' * 60}")
+#         print(f"  {part}")
+#         print(f"{'=' * 60}")
+#         print(df.to_string(index=False))
 
-with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-    # print(f'\nResult data of the {name} fit:\n ', data)
-    print(f'\nFull result data of every part for every distribution:')
-    for part, df in data_all.items():
-        print(f"\n{'=' * 60}")
-        print(f"  {part}")
-        print(f"{'=' * 60}")
-        print(df.to_string(index=False))
 
 
+weibull_mixture('HCCTRV', ci=0.99)
 
 
 

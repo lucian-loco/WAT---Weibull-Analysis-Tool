@@ -10,6 +10,9 @@ from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR
 Fisher Matrix based confidence intervals for 
 Weibull Mixture and Weibull Competing Risks
 """
+"""
+
+"""
 #-----------------------------------------------------------------------------------------------------------------------
 # Help functions
 #-----------------------------------------------------------------------------------------------------------------------
@@ -160,7 +163,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
 #-----------------------------------------------------------------------------------------------------------------------
 # Main functions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=5000, return_sf=False, seed=42, hess_step=1e-4):
+def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42, hess_step=1e-4):
     """
     Fisher-matrix-based confidence intervals for a Weibull mixture model.
 
@@ -222,7 +225,7 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
     )
 
 
-def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=5000, return_sf=False, seed=42, hess_step=1e-4):
+def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42, hess_step=1e-4):
     """
     Fisher-matrix-based confidence intervals for a Weibull competing risks model.
 
