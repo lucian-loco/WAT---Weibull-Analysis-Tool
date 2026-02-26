@@ -72,6 +72,17 @@ def route_weibull():
     return send_file(graph, mimetype='image/png')
 
 
+@app.route('/weibull_new', methods=['GET'])
+def route_weibull_new():
+    try:
+        part = request.args.get('part')
+        graph = weibull.generate_graph_new(part)
+    except RuntimeError as e:
+        return 'Weibull plot cannot be generated: ' + str(e), 400
+
+    return send_file(graph, mimetype='image/png')
+
+
 @app.route('/crate/new')
 def route_crate_new():
     drawio_libs = get_drawio_lib_urls()
