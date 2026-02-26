@@ -70,6 +70,10 @@ def _compute_covariance(neg_loglik_fn, params, step=1e-4):
         warnings.warn("The covariance matrix has negative diagonal entries. Try a different step size (e.g., step=1e-3 or step=1e-5).", UserWarning)
         return None
 
+    if np.any(np.isnan(cov)):
+        warnings.warn("The covariance matrix contains 'nan' values. It's not possible to calculate a confidence interval. Result without interval.", UserWarning)
+        return None
+
     return cov
 
 
@@ -108,6 +112,10 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
         Upper confidence bound.
     Or (None, None) if too few valid samples occur
     """
+    # If cov contains NaN then just return None, None as upper and lower --> no calculation of the CI
+    if cov is None:
+        return None, None
+
     rng = np.random.default_rng(seed=seed)
     samples = rng.multivariate_normal(params, cov, size=n_samples)
 

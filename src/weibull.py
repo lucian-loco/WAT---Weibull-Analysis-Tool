@@ -6,6 +6,7 @@ from data_weibull import get_data
 from data_weibull import get_parts
 from data_weibull import get_all_data
 from data_weibull import get_csv_data
+from reliability.Utils import colorprint
 from reliability.Fitters import Fit_Everything
 from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
@@ -57,7 +58,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
                         CI_type='reliability', CI=ci,
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.2f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
@@ -112,7 +113,7 @@ def weibull_3p(part, ci=0.95, save_path=None):
                         CI_type='reliability', CI=ci,
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f}, CI={ci:.2f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f}, CI={ci:.3f})')
     plt.legend(loc='upper left')
     ax = plt.gca()
     ax.set_xlabel(rf'Time in days minus failure free time $\gamma$={wb.gamma:.4f}')
@@ -174,7 +175,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, CI={ci:.2f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
@@ -253,7 +254,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, CI={ci:.2f})')
+    plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, CI={ci:.3f})')
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
@@ -326,19 +327,15 @@ def weibull_fit_best(part, sort_by='BIC'):
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
 
     if distinct_failure_count < 3:
-        with warnings.catch_warnings():
-            warnings.simplefilter('always', UserWarning)
-            warnings.warn(f'Less than 3 distinct failure times for "{part}"! It is not possible to fit the Weibull_3P, Weibull_Mixture and Weibull_CR. '
-                'Therefore, these models will not be used for the fitting.', UserWarning)
+        colorprint(f'Less than 3 distinct failure times for "{part}"! It is not possible to fit the Weibull_3P, Weibull_Mixture and Weibull_CR. '
+                'Therefore, these models will not be used for the fitting.', text_color='red')
 
         exclude = ['Weibull_3P', 'Weibull_CR', 'Weibull_Mixture', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
                    'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
     elif failure_size < 20:
-        with warnings.catch_warnings():
-            warnings.simplefilter('always', UserWarning)
-            warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
-                'Therefore, these models will not be used for the fitting.', UserWarning)
+        colorprint(f'Less than 20 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
+                'Therefore, these models will not be used for the fitting.', text_color='red')
 
         exclude = ['Weibull_CR', 'Weibull_Mixture', 'Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
                    'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
@@ -436,7 +433,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
         print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
         return resolved
 
-
+# ToDo: In case a Weibull Mixture is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
 def automated_weibull():
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
@@ -540,7 +537,7 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
-def generate_graph(part):
+def generate_graph_new(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -571,6 +568,32 @@ def generate_graph(part):
     return buffer
 
 
+def generate_graph(part):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
+
+    data = get_data(part)
+
+    # Prepare the response
+    buffer = io.BytesIO()   # buffer to keep the plot in RAM (instead of a file)
+
+    # Weibull Analysis
+    # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
+    x = Analysis(df=data['failures'], ds=data['suspensions'],
+            show=False, save=True,
+            fig_size=(9.5, 6),    # (8, 6) -> 800x600
+            unit='days',
+            plot_title='Weibull Probability Plot for {0}'.format(part),
+            path=buffer)
+    x.mle()
+
+
+    # Send the plot image
+    buffer.seek(0)
+    return buffer
+
+
+
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
@@ -591,6 +614,7 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
 
 
 
+
 # # Size of parts_fit_results (Dict of DataFrames)
 # total_fit = sum(df.memory_usage(deep=True).sum() for df in parts_data.values())
 # print(f"parts_fit_results: {total_fit / 1024:.1f} KB")
@@ -603,9 +627,11 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
 
 
 
-#ToDo implementation of different libraries
+#ToDo: implementation of different libraries
 
-#ToDo implement own function for plotting the data out of the several distribution functions
+#ToDo: implement own function for plotting the data out of the several distribution functions
+
+#ToDo: Implement a manually changeable Slide to play with the CI value maybe
 
 weibull_distributions = [weibull_2p, weibull_3p, weibull_mixture, weibull_cr, weibull_fit_best]
 
