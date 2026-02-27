@@ -14,6 +14,7 @@ from reliability.Fitters import Fit_Weibull_CR
 from reliability.Fitters import Fit_Weibull_Mixture
 from weibull_ci import weibull_cr_fisher_bounds
 from weibull_ci import weibull_mixture_fisher_bounds
+from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Other_functions import make_right_censored_data
 import io
@@ -364,39 +365,6 @@ def weibull_fit_best(part, sort_by='BIC'):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def ask_threshold(name: str, default: int):
-    """
-    Asks the user to choose the threshold for the failure count and the distinct failures.
-    """
-    while True:
-        user_input = input(f"Enter {name} and press enter (Default value: {default}): ").strip()
-        if user_input == "":
-            return default
-        try:
-            value = int(user_input)
-            if value > 1:
-                return value
-            else:
-                print("  → Please enter a positive number greater than 1.")
-        except ValueError:
-            print("  → Invalid input, please enter an integer..")
-
-
-def ask_sort_by(default: str = 'BIC'):
-    """
-    Asks the user to choose the sort by.
-    """
-    valid_options = ['AICc', 'BIC']
-    while True:
-        user_input = input(f"Enter sort method {valid_options} and press enter (Default value: {default}): ").strip()
-        if user_input == "":
-            return default
-        if user_input in valid_options:
-            return user_input
-        else:
-            print(f"  → Invalid input, please enter one of {valid_options}.")
-
-
 def validate_sort_by(value_str: str, default: str = 'AICc'):
     valid = ['AICc', 'BIC']
     if value_str.strip() == "":
@@ -404,24 +372,6 @@ def validate_sort_by(value_str: str, default: str = 'AICc'):
     if value_str in valid:
         return value_str, None
     return None, f"Invalid input, please enter one of {valid}."
-
-
-def ask_ci(default: float = 0.95):
-    """
-    Asks the user to choose the ci level.
-    """
-    while True:
-        user_input = input(f"Enter confidence interval (0-1) and press enter (Default value: {default}): ").strip()
-        if user_input == "":
-            return default
-        try:
-            value = float(user_input)
-            if 0 < value < 1:
-                return value
-            else:
-                print("  → Please enter a value strictly between 0 and 1.")
-        except ValueError:
-            print("  → Invalid input, please enter a number (e.g. 0.95).")
 
 
 def validate_ci(value_str: str, default: float = 0.95):
