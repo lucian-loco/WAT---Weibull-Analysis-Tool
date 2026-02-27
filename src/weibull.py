@@ -28,6 +28,28 @@ import matplotlib.pyplot as plt
 
 
 #-----------------------------------------------------------------------------------------------------------------------
+# Plot settings
+#-----------------------------------------------------------------------------------------------------------------------
+def plot_settings():
+    ax = plt.gca()
+    ax.set_xlabel('Time in days')
+    ax.set_ylabel('Failure probability')
+    plt.legend(loc='upper left')
+    ax.set_ylim(0.001, 0.999)
+    labels = ax.get_xticklabels()
+    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
+        label.set_visible(i < 3 or (i - 3) % 2 == 0)
+
+    xmin, xmax = ax.get_xlim()
+    ax.set_xlim(xmin * 0.8, xmax * 1.2)
+
+    fig = plt.gcf()
+    fig.set_size_inches(9.5, 6)
+
+    return ax, fig, xmin, xmax
+
+
+#-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_2p(part, ci=0.95, save_path=None):
@@ -60,18 +82,8 @@ def weibull_2p(part, ci=0.95, save_path=None):
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
-    plt.legend(loc='upper left')
-    ax = plt.gca()
-    ax.set_xlabel('Time in days')
-    ax.set_ylabel('Failure probability')
-    ax.set_ylim(0.001, 0.999)
-    xmin, xmax = ax.get_xlim()
-    ax.set_xlim(xmin * 0.8, xmax * 1.2)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
-    fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
+    ax, fig,_ ,_ = plot_settings()
+
     if save_path:
         plt.savefig(save_path, dpi=300)
         plt.close()
@@ -115,18 +127,9 @@ def weibull_3p(part, ci=0.95, save_path=None):
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f}, CI={ci:.3f})')
-    plt.legend(loc='upper left')
-    ax = plt.gca()
+    ax, fig, _, _ = plot_settings()
     ax.set_xlabel(rf'Time in days minus failure free time $\gamma$={wb.gamma:.4f}')
-    ax.set_ylabel('Failure probability')
-    ax.set_ylim(0.001, 0.999)
-    xmin, xmax = ax.get_xlim()
-    ax.set_xlim(xmin * 0.8, xmax * 1.2)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
-    fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
+
     if save_path:
         plt.savefig(save_path, dpi=300)
         plt.close()
@@ -177,11 +180,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
-    ax = plt.gca()
-    ax.set_xlabel('Time in days')
-    ax.set_ylabel('Failure probability')
-    ax.set_ylim(0.001, 0.999)
-    xmin, xmax = ax.get_xlim()
+    ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
@@ -199,13 +198,6 @@ def weibull_mixture(part, ci=0.95, save_path=None):
         )
     #-------------------------------------------------------------------------------------------------------------------
 
-    plt.legend(loc='upper left')
-    ax.set_xlim(xmin * 0.8, xmax * 1.2)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
-    fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
         plt.close()
@@ -256,11 +248,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(rf'Weibull Probability Plot for {part} with {'\n'} ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, CI={ci:.3f})')
-    ax = plt.gca()
-    ax.set_xlabel('Time in days')
-    ax.set_ylabel('Failure probability')
-    ax.set_ylim(0.001, 0.999)
-    xmin, xmax = ax.get_xlim()
+    ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
@@ -278,13 +266,6 @@ def weibull_cr(part, ci=0.95, save_path=None):
         )
     # -------------------------------------------------------------------------------------------------------------------
 
-    plt.legend(loc='upper left')
-    ax.set_xlim(xmin * 0.8, xmax * 1.2)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
-    fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
     if save_path:
         plt.savefig(save_path, dpi=300)
         plt.close()
@@ -565,17 +546,20 @@ def generate_graph(part):
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
-if __name__ == "__main__":
-    # data, _, name = manual_weibull('HCCFISA')
-    parts_data, data_all = automated_weibull()
+# if __name__ == "__main__":
+#     # data, _, name = manual_weibull('HCCFISA')
+#     parts_data, data_all = automated_weibull()
+#
+#     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+#         # print(f'\nResult data of the {name} fit:\n ', data)
+#         print(f'\nFull result data of every part for every distribution:')
+#         for part, df in data_all.items():
+#             print(f"\n{'=' * 60}")
+#             print(f"  {part}")
+#             print(f"{'=' * 60}")
+#             print(df.to_string(index=False))
 
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        # print(f'\nResult data of the {name} fit:\n ', data)
-        print(f'\nFull result data of every part for every distribution:')
-        for part, df in data_all.items():
-            print(f"\n{'=' * 60}")
-            print(f"  {part}")
-            print(f"{'=' * 60}")
-            print(df.to_string(index=False))
+
+weibull_mixture('HCCTRV')
 
 
