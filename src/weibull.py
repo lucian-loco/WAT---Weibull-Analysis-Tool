@@ -562,9 +562,6 @@ def generate_graph(part):
 
 
 
-
-
-
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
@@ -582,54 +579,3 @@ if __name__ == "__main__":
             print(df.to_string(index=False))
 
 
-
-
-
-
-
-# # Size of parts_fit_results (Dict of DataFrames)
-# total_fit = sum(df.memory_usage(deep=True).sum() for df in parts_data.values())
-# print(f"parts_fit_results: {total_fit / 1024:.1f} KB")
-#
-# # Size of parts_data_fit_all (Dict of DataFrames)
-# total_all = sum(df.memory_usage(deep=True).sum() for df in data_all.values())
-# print(f"parts_data_fit_all: {total_all / 1024:.1f} KB")
-#
-# print(f"Total RAM: {(total_fit + total_all) / 1024:.1f} KB")
-
-
-
-#ToDo: implementation of different libraries
-
-#ToDo: implement own function for plotting the data out of the several distribution functions
-
-#ToDo: Implement a manually changeable Slide to play with the CI value maybe
-
-# weibull_distributions = [weibull_2p, weibull_3p, weibull_mixture, weibull_cr, weibull_fit_best]
-
-# Definition of the required part
-# part_name = 'HCCVSEA'
-
-# Create the Weibull plot with 2 different ways
-#weibull_2p(part_name)
-#generate_graph_local(part_name)
-#weibull_fit_best(part_name)
-#weibull_mixture(part=part_name)
-
-# for weibull_distribution in weibull_distributions:
-#     weibull_distribution(part=part_name)
-
-
-
-
-#base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots"
-
-#part_groups = [data_weibull.parts_to_be_edited_or_changed, data_weibull.parts_with_sus_dates, data_weibull.parts_failed_selection]
-
-#for group_name, parts in zip(["parts_to_be_edited_or_changed", "parts_with_sus_dates", "parts_failed_selection"], part_groups):
-#    group_dir = os.path.join(base_dir, group_name)
-#    os.makedirs(group_dir, exist_ok=True)
-
-#    for part in parts:
-#        save_path = os.path.join(group_dir, f"weibull_plot_{part}.png")
-#        weibull_2p(part, save_path=save_path)
