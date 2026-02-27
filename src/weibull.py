@@ -397,6 +397,15 @@ def ask_sort_by(default: str = 'BIC'):
             print(f"  → Invalid input, please enter one of {valid_options}.")
 
 
+def validate_sort_by(value_str: str, default: str = 'AICc'):
+    valid = ['AICc', 'BIC']
+    if value_str.strip() == "":
+        return default, None
+    if value_str in valid:
+        return value_str, None
+    return None, f"Invalid input, please enter one of {valid}."
+
+
 def ask_ci(default: float = 0.95):
     """
     Asks the user to choose the ci level.
@@ -413,6 +422,18 @@ def ask_ci(default: float = 0.95):
                 print("  → Please enter a value strictly between 0 and 1.")
         except ValueError:
             print("  → Invalid input, please enter a number (e.g. 0.95).")
+
+
+def validate_ci(value_str: str, default: float = 0.95):
+    if value_str.strip() == "":
+        return default, None
+    try:
+        v = float(value_str)
+        if 0 < v < 1:
+            return v, None
+        return None, "Please enter a value strictly between 0 and 1."
+    except ValueError:
+        return None, "Invalid input, please enter a number (e.g. 0.95)."
 
 
 def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
@@ -538,18 +559,16 @@ def manual_weibull(part):
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
 hitdb_dashboard_used = False
-def generate_graph_new(part):
+def generate_graph_new(part, sort_by='AICc', ci=0.95):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
     buffer = io.BytesIO()   # Save plot in RAM
 
-    sort_by = 'AICc'
-
-    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=0.95, save_path=buffer),
-                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=0.95, save_path=buffer),
-                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=0.95, save_path=buffer),
-                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=0.95, save_path=buffer)}
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=buffer),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=buffer),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=buffer)}
 
     wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
 

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<title>HIT Weibull Analysis</title>
+<head>
+    <meta charset="UTF-8">
+    <style type="text/css">
+        body {
+            font-family: sans-serif;
+            margin: 40px;
+        }
+        label {
+            display: block;
+            margin-top: 16px;
+            font-weight: bold;
+        }
+        input, select {
+            margin-top: 4px;
+            padding: 4px;
+            font-size: 1em;
+        }
+        .error {
+            color: red;
+            margin-left: 8px;
+        }
+        button {
+            margin-top: 24px;
+            padding: 8px 20px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Weibull Analysis for: <code>{{ part }}</code></h2>
+
+    {# part is kept as URL parameter so it is available in the POST request #}
+    <form action="/weibull_new?part={{ part }}" method="post">
+
+        <label for="sort_by">Sort by</label>
+        <select id="sort_by" name="sort_by">
+            <option value="AICc" {% if defaults.sort_by == 'AICc' %}selected{% endif %}>AICc</option>
+            <option value="BIC"  {% if defaults.sort_by == 'BIC'  %}selected{% endif %}>BIC</option>
+        </select>
+        {% if errors.sort_by %}
+            <span class="error"> → {{ errors.sort_by }}</span>
+        {% endif %}
+
+        <label for="ci">Confidence Interval (0–1)</label>
+        <input type="number" id="ci" name="ci"
+               value="{{ defaults.ci }}"
+               step="0.01" min="0.01" max="0.99">
+        {% if errors.ci %}
+            <span class="error"> → {{ errors.ci }}</span>
+        {% endif %}
+
+        <br>
+        <button type="submit">Generate Plot</button>
+
+    </form>
+</body>
+</html>
+
