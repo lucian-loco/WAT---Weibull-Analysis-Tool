@@ -558,7 +558,6 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
-hitdb_dashboard_used = False
 def generate_graph_new(part, sort_by='AICc', ci=0.95):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -584,8 +583,6 @@ def generate_graph_new(part, sort_by='AICc', ci=0.95):
 
     wb_results = fit_function(part)
 
-    hitdb_dashboard_used = True
-
     buffer.seek(0)
     return buffer
 
@@ -609,18 +606,19 @@ def generate_graph(part):
             path=buffer)
     x.mle()
 
-    hitdb_dashboard_used = True
-
     # Send the plot image
     buffer.seek(0)
     return buffer
 
 
 
+
+
+
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
-if not hitdb_dashboard_used:
+if __name__ == "__main__":
     # data, _, name = manual_weibull('HCCFISA')
     parts_data, data_all = automated_weibull()
 
