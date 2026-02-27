@@ -96,7 +96,7 @@ def route_weibull_new():
 
             return send_file(graph, mimetype='image/png')
 
-    return render_template('weibull_new_form.html', part=part, errors=errors, defaults={'sort_by': 'AICc', 'ci': 0.95})
+    return render_template('weibull_form.html', part=part, errors=errors, defaults={'sort_by': 'AICc', 'ci': 0.95})
 
 
 @app.route('/crate/new')
