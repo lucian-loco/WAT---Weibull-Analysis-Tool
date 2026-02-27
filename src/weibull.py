@@ -537,6 +537,7 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
+hitdb_dashboard_used = False
 def generate_graph_new(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -564,6 +565,8 @@ def generate_graph_new(part):
 
     wb_results = fit_function(part)
 
+    hitdb_dashboard_used = True
+
     buffer.seek(0)
     return buffer
 
@@ -587,6 +590,7 @@ def generate_graph(part):
             path=buffer)
     x.mle()
 
+    hitdb_dashboard_used = True
 
     # Send the plot image
     buffer.seek(0)
@@ -597,21 +601,20 @@ def generate_graph(part):
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
-# # data, _, name = manual_weibull('HCCFISA')
-# parts_data, data_all = automated_weibull()
-#
-# with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-#     # print(f'\nResult data of the {name} fit:\n ', data)
-#     print(f'\nFull result data of every part for every distribution:')
-#     for part, df in data_all.items():
-#         print(f"\n{'=' * 60}")
-#         print(f"  {part}")
-#         print(f"{'=' * 60}")
-#         print(df.to_string(index=False))
+if not hitdb_dashboard_used:
+    # data, _, name = manual_weibull('HCCFISA')
+    parts_data, data_all = automated_weibull()
+
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        # print(f'\nResult data of the {name} fit:\n ', data)
+        print(f'\nFull result data of every part for every distribution:')
+        for part, df in data_all.items():
+            print(f"\n{'=' * 60}")
+            print(f"  {part}")
+            print(f"{'=' * 60}")
+            print(df.to_string(index=False))
 
 
-
-weibull_mixture('HCCTRV', ci=0.99)
 
 
 
@@ -635,10 +638,10 @@ weibull_mixture('HCCTRV', ci=0.99)
 
 #ToDo: Implement a manually changeable Slide to play with the CI value maybe
 
-weibull_distributions = [weibull_2p, weibull_3p, weibull_mixture, weibull_cr, weibull_fit_best]
+# weibull_distributions = [weibull_2p, weibull_3p, weibull_mixture, weibull_cr, weibull_fit_best]
 
 # Definition of the required part
-part_name = 'HCCVSEA'
+# part_name = 'HCCVSEA'
 
 # Create the Weibull plot with 2 different ways
 #weibull_2p(part_name)
