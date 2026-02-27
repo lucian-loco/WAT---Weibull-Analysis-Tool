@@ -38,6 +38,7 @@ def get_parts(failure_threshold=4, distinct_threshold=2):
     return part_names
 
 
+# ToDo: Process the data further to capture failures and suspensions
 # Number >= 1 as threshold for the number of failures and the count of distinct failure times
 def get_all_data(failure_threshold=4, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
@@ -118,6 +119,7 @@ def get_data(part):
     return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
 
 
+# ToDo: Process the data further to capture failures and suspensions
 # Get data for the Weibull Analysis out of local .csv files
 def get_csv_data(query='above 3'):
     base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull-Data_before-cleaning-Christine"
