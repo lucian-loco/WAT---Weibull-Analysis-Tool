@@ -11,7 +11,16 @@ Fisher Matrix based confidence intervals for
 Weibull Mixture and Weibull Competing Risks
 """
 """
-
+How does it work so far theoretically:
+    1. Covariance matrix: The Hessian of the negative log-likelihood is evaluated numerically at the MLE parameter estimates. 
+       Its inverse yields the Fisher-information-based covariance matrix C = H^-1, which quantifies parameter uncertainty.
+    2. Monte Carlo sampling: N parameter vectors are drawn from the asymptotic multivariate normal distribution of the MLE. 
+       Physically invalid samples (e.g. negative scale/shape parameters) are discarded.
+    3. Pointwise CI: For each sampled parameter vector, the full CDF curve is evaluated over the x-grid. 
+       Pointwise α/2 and 1−α/2 percentiles across all valid curves yield the lower and upper confidence bounds at each time point.
+This approach is equivalent to the classical analytical Fisher-matrix method (Delta method), but avoids explicit gradient derivation of the composite CDF 
+--> making it directly applicable to multi-parameter models such as Weibull Mixture and Weibull Competing Risks, where closed-form derivatives are difficult to tractable. 
+Censored observations are correctly accounted for through the likelihood function used to compute the Hessian.
 """
 #-----------------------------------------------------------------------------------------------------------------------
 # Help functions
