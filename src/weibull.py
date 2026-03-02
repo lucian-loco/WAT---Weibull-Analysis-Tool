@@ -14,7 +14,6 @@ from reliability.Fitters import Fit_Weibull_CR
 from reliability.Fitters import Fit_Weibull_Mixture
 from weibull_ci import weibull_cr_fisher_bounds
 from weibull_ci import weibull_mixture_fisher_bounds
-from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 #from reliability.Other_functions import distribution_explorer
 #from reliability.Other_functions import make_right_censored_data
 import io
@@ -547,6 +546,8 @@ def generate_graph(part):
 # Start the script
 #***********************************************************************************************************************
 if __name__ == "__main__":
+    from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
+
     weibull_mixture('HCCTRV')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
