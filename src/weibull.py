@@ -546,7 +546,8 @@ def generate_graph(part):
 #***********************************************************************************************************************
 # Start the script
 #***********************************************************************************************************************
-# if __name__ == "__main__":
+if __name__ == "__main__":
+    weibull_mixture('HCCTRV')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
@@ -560,6 +561,6 @@ def generate_graph(part):
 #             print(df.to_string(index=False))
 
 
-weibull_mixture('HCCTRV')
+
 
 
