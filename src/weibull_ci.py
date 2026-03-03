@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import autograd
 import autograd.numpy as anp
-from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR
+from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR, Fit_Weibull_2P, Fit_Weibull_3P
 
 
 
@@ -37,6 +37,17 @@ the likelihood function used to compute the Hessian.
 def _weibull_cdf(t, alpha, beta):
     """Computes the CDF of a two-parameter Weibull distribution"""
     return 1.0 - np.exp(-(t / alpha) ** beta)
+
+
+def _weibull_3p_cdf(t, alpha, beta, gamma):
+    """
+    Computes the CDF of a three-parameter Weibull distribution:
+        F(t) = 1 - exp(-((t - gamma) / alpha)^beta)
+    Valid only for t > gamma; returns 0 for t <= gamma.
+    """
+    t = np.asarray(t, dtype=float)
+    result = np.where(t > gamma, _weibull_cdf(t - gamma, alpha, beta), 0.0)
+    return result
 
 
 def _mixture_cdf(t, a1, b1, a2, b2, p):
@@ -302,6 +313,142 @@ def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
     def cdf_fn_log(t, log_a1, log_b1, log_a2, log_b2):
         return _cr_cdf(t, np.exp(log_a1), np.exp(log_b1), np.exp(log_a2), np.exp(log_b2))
+
+    return _sample_and_compute_bounds(
+        cdf_fn=cdf_fn_log,
+        params=params,
+        cov=cov,
+        xvals=xvals,
+        CI=CI,
+        n_samples=n_samples,
+        return_sf=return_sf,
+        seed=seed
+    )
+
+
+def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
+    """
+    Computes confidence intervals for a Weibull 2P model using Fisher-matrix-based
+    Monte Carlo sampling.
+
+    The covariance matrix is derived analytically via automatic differentiation
+    (autograd) of the negative log-likelihood. Parameter sampling is performed on
+    the log-scale (ln(alpha), ln(beta)) to ensure positivity and improve the
+    normality assumption. Percentiles are evaluated on the Weibull linearization
+    scale (u-scale) before back-transformation to CDF space.
+
+    Parameters
+    ----------
+    fit           : Fit_Weibull_2P
+                    Already fitted model object from the reliability library.
+    xvals         : array-like
+                    x-values at which the CI is evaluated. Should be derived
+                    from the raw data range, not from ax.get_xlim().
+    failures      : list or array
+                    Failure times.
+    right_censored: list or array, optional
+                    Suspension (right-censored) times.
+    CI            : float, default 0.95
+                    Confidence level, e.g. 0.95 for a 95% CI.
+    n_samples     : int, default 10000
+                    Number of Monte Carlo samples drawn from the parameter distribution.
+    return_sf     : bool, default False
+                    If True, returns bounds for the survival function (SF) instead of the CDF.
+    seed          : int, default 42
+                    Random seed for reproducibility.
+
+    Returns
+    -------
+    lower : ndarray, shape (len(xvals),)
+            Lower confidence bound.
+    upper : ndarray, shape (len(xvals),)
+            Upper confidence bound.
+    """
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    params = np.array([
+        np.log(fit.alpha),
+        np.log(fit.beta)
+    ])
+
+    def neg_loglik(p):
+        return Fit_Weibull_2P.LL(anp.exp(p), T_f, T_rc)
+
+    cov = _compute_covariance(neg_loglik, params)
+
+    def cdf_fn_log(t, log_alpha, log_beta):
+        return _weibull_cdf(t, np.exp(log_alpha), np.exp(log_beta))
+
+    return _sample_and_compute_bounds(
+        cdf_fn=cdf_fn_log,
+        params=params,
+        cov=cov,
+        xvals=xvals,
+        CI=CI,
+        n_samples=n_samples,
+        return_sf=return_sf,
+        seed=seed
+    )
+
+
+def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
+    """
+    Computes confidence intervals for a Weibull 3P model using Fisher-matrix-based
+    Monte Carlo sampling.
+
+    The covariance matrix is derived analytically via automatic differentiation
+    (autograd) of the negative log-likelihood. Parameter sampling is performed on
+    a mixed scale: log-scale for (ln(alpha), ln(beta)) to ensure positivity, and
+    linear scale for gamma (location parameter). Percentiles are evaluated on the
+    Weibull linearization scale (u-scale) before back-transformation to CDF space.
+
+    Parameters
+    ----------
+    fit           : Fit_Weibull_3P
+                    Already fitted model object from the reliability library.
+    xvals         : array-like
+                    x-values at which the CI is evaluated. Should be derived
+                    from the raw data range, not from ax.get_xlim().
+    failures      : list or array
+                    Failure times.
+    right_censored: list or array, optional
+                    Suspension (right-censored) times.
+    CI            : float, default 0.95
+                    Confidence level, e.g. 0.95 for a 95% CI.
+    n_samples     : int, default 10000
+                    Number of Monte Carlo samples drawn from the parameter distribution.
+    return_sf     : bool, default False
+                    If True, returns bounds for the survival function (SF) instead of the CDF.
+    seed          : int, default 42
+                    Random seed for reproducibility.
+
+    Returns
+    -------
+    lower : ndarray, shape (len(xvals),)
+            Lower confidence bound.
+    upper : ndarray, shape (len(xvals),)
+            Upper confidence bound.
+    """
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    params = np.array([
+        np.log(fit.alpha),
+        np.log(fit.beta),
+        fit.gamma
+    ])
+
+    def neg_loglik(p):
+        alpha = anp.exp(p[0])
+        beta  = anp.exp(p[1])
+        gamma = p[2]
+        return Fit_Weibull_3P.LL(anp.array([alpha, beta, gamma]), T_f, T_rc)
+
+    cov = _compute_covariance(neg_loglik, params)
+
+    def cdf_fn_log(t, log_alpha, log_beta, gamma):
+        return _weibull_3p_cdf(t, np.exp(log_alpha), np.exp(log_beta), gamma)
 
     return _sample_and_compute_bounds(
         cdf_fn=cdf_fn_log,
