@@ -13,6 +13,7 @@ COPY requirements.txt /
 RUN pip3 install -r /requirements.txt
 
 COPY . /app
+RUN mkdir /app/src/drawio && chmod 0777 /app/src/drawio
 WORKDIR /app
 
 EXPOSE 8888
