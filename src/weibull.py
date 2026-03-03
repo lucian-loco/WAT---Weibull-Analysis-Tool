@@ -125,9 +125,9 @@ def weibull_3p(part, ci=0.95, save_path=None):
                         CI_type='reliability', CI=ci,
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with \n ($\alpha$={wb.alpha:.4f}, $\beta$={wb.beta:.4f}, $\gamma$={wb.gamma:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
     ax, fig, _, _ = plot_settings()
-    ax.set_xlabel(rf'Time in days minus failure free time $\gamma$={wb.gamma:.4f}')
+    ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
 
     if save_path:
         plt.savefig(save_path, dpi=300)
@@ -178,7 +178,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with \n ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, \nCI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, \n CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -246,7 +246,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(rf'Weibull Probability Plot for {part} with \n ($\alpha_1$={wb.alpha_1:.4f}, $\beta_1$={wb.beta_1:.4f}, $\alpha_2$={wb.alpha_2:.4f}, $\beta_2$={wb.beta_2:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
