@@ -72,6 +72,33 @@ def route_weibull():
     return send_file(graph, mimetype='image/png')
 
 
+@app.route('/weibull_new', methods=['GET', 'POST'])
+def route_weibull_new():
+    part = request.args.get('part')
+
+    if not part:
+        return 'Parameter "part" not valid or is missing', 400
+
+    errors = {}
+
+    if request.method == 'POST':
+        sb, err = weibull.validate_sort_by(request.form.get('sort_by', ''))
+        if err: errors['sort_by'] = err
+
+        ci, err = weibull.validate_ci(request.form.get('ci', ''))
+        if err: errors['ci'] = err
+
+        if not errors:
+            try:
+                graph = weibull.generate_graph_new(part=part, sort_by=sb, ci=ci)
+            except RuntimeError as e:
+                return 'Weibull plot cannot be generated: ' + str(e), 400
+
+            return send_file(graph, mimetype='image/png')
+
+    return render_template('weibull_form.html', part=part, errors=errors, defaults={'sort_by': 'AICc', 'ci': 0.95})
+
+
 @app.route('/crate/new')
 def route_crate_new():
     drawio_libs = get_drawio_lib_urls()
