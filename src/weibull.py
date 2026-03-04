@@ -178,7 +178,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, proportion_factor={wb.proportion_1:.3f}, \n CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -548,7 +548,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_mixture('HCCTRV')
+    weibull_2p('HCCTRV')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
