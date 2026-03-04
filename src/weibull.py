@@ -43,9 +43,7 @@ def plot_settings():
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
 
     fig = plt.gcf()
-    width = 9.5/3
-    height = 6/3
-    fig.set_size_inches(width, height)
+    fig.set_size_inches(9.5, 6)
 
     return ax, fig, xmin, xmax
 
