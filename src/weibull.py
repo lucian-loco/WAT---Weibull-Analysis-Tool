@@ -43,7 +43,9 @@ def plot_settings():
     ax.set_xlim(xmin * 0.8, xmax * 1.2)
 
     fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
+    width = 9.5/3
+    height = 6/3
+    fig.set_size_inches(width, height)
 
     return ax, fig, xmin, xmax
 
@@ -71,7 +73,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
-    plt.figure()
+    plt.figure(figsize=(9.5, 6), dpi=100)
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
