@@ -84,7 +84,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
     ax, fig,_ ,_ = plot_settings()
 
     if save_path:
-        plt.savefig(save_path, dpi=100)
+        plt.savefig(save_path)
         plt.close()
     else:
         plt.show()
@@ -130,7 +130,7 @@ def weibull_3p(part, ci=0.95, save_path=None):
     ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
 
     if save_path:
-        plt.savefig(save_path, dpi=100)
+        plt.savefig(save_path)
         plt.close()
     else:
         plt.show()
@@ -198,7 +198,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
     #-------------------------------------------------------------------------------------------------------------------
 
     if save_path:
-        plt.savefig(save_path, dpi=100)
+        plt.savefig(save_path)
         plt.close()
     else:
         plt.show()
@@ -266,7 +266,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
     # -------------------------------------------------------------------------------------------------------------------
 
     if save_path:
-        plt.savefig(save_path, dpi=100)
+        plt.savefig(save_path)
         plt.close()
     else:
         plt.show()
