@@ -84,7 +84,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
     ax, fig,_ ,_ = plot_settings()
 
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=100)
         plt.close()
     else:
         plt.show()
@@ -130,7 +130,7 @@ def weibull_3p(part, ci=0.95, save_path=None):
     ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
 
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=100)
         plt.close()
     else:
         plt.show()
@@ -198,7 +198,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
     #-------------------------------------------------------------------------------------------------------------------
 
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=100)
         plt.close()
     else:
         plt.show()
@@ -266,7 +266,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
     # -------------------------------------------------------------------------------------------------------------------
 
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=100)
         plt.close()
     else:
         plt.show()
@@ -345,7 +345,7 @@ def weibull_fit_best(part, sort_by='BIC'):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def validate_sort_by(value_str: str, default: str = 'AICc'):
+def validate_sort_by(value_str: str, default: str = 'BIC'):
     valid = ['AICc', 'BIC']
     if value_str.strip() == "":
         return default, None
@@ -388,7 +388,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
 def automated_weibull():
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
-    sort_by = ask_sort_by(default='AICc')
+    sort_by = ask_sort_by(default='BIC')
     ci = ask_ci(default=0.95)
 
     print(f"\n→ Starting search for parts with failure_threshold={failure_threshold}, distinct_threshold={distinct_threshold}, sort_by={sort_by} and CI={ci}\n")
@@ -458,7 +458,7 @@ def manual_weibull(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    sort_by = ask_sort_by(default='AICc')
+    sort_by = ask_sort_by(default='BIC')
     ci = ask_ci(default=0.95)
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
@@ -488,7 +488,7 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HITDB Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
-def generate_graph_new(part, sort_by='AICc', ci=0.95):
+def generate_graph_new(part, sort_by='BIC', ci=0.95):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
