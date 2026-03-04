@@ -176,8 +176,6 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     if len(params) == 5:
         valid = (samples[:, 4] >= 0) & (samples[:, 4] <= 1)
         samples = samples[valid]
-        if len(samples) == 0:
-            return None, None
 
     if len(samples) == 0:
         return None, None
