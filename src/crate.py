@@ -247,20 +247,23 @@ def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
     return buffer
 
 
-def generate_graph_stencil(stencil, scale=1.0):
+def generate_graph_stencil(stencil, scale=None, max_size=None):
     logger.debug('Generating stencil graph for %s', stencil)
-    generator = drawio.Generator()
 
-    for filepath in glob.glob(os.path.join('drawio', '*.xml')):
-        try:
-            generator.load_library(filepath)
-        except:
-            logger.error(f'Could not load library {filepath}')
+    if scale and max_size:
+        logger.warning('Both scale and max_size parameters are provided, max_size will be ignored')
+        max_size = None
+    elif not scale and not max_size:
+        scale = 1.0
 
     try:
         # Find the shape to get its dimensions
         library_name = generator.find_shape_library(stencil)
         shape = generator.get_shape(library_name[0], stencil)
+
+        if max_size:
+            # Calculate the scale to fit within the maximum size
+            scale = min(max_size / shape.width, max_size / shape.height)
 
         generator.clear_page(shape.width * scale, shape.height * scale)
         generator.add_shape(library_name[0], stencil, 0, 0, shape.width * scale, shape.height * scale)

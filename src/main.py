@@ -203,8 +203,9 @@ def route_crate_get():
 def route_crate_stencil_get():
     try:
         part = request.args.get('part')
-        scale = request.args.get('scale', 1.0, type=float)
-        graph = crate.generate_graph_stencil(part, scale)
+        scale = request.args.get('scale', None, type=float)
+        max_size = request.args.get('maxsize', None, type=float)
+        graph = crate.generate_graph_stencil(part, scale, max_size)
 
         if graph is None:   # no crate name/ID specified, show an empty draw.io editor
             return render_template('drawio.html', drawio_libs=())
