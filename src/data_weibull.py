@@ -1,8 +1,25 @@
 #!/usr/bin/python3
 import db_hitdata
 import pandas as pd
-import os
+import threading
+import logging
 import warnings
+import os
+import time
+
+
+
+_weibull_cache = None
+_cache_lock = threading.Lock()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
 
 
 # Number >= 1 as threshold for the number of failures and the count of distinct failure times
@@ -38,7 +55,6 @@ def get_parts(failure_threshold=4, distinct_threshold=2):
     return part_names
 
 
-# ToDo: Process the data further to capture failures and suspensions
 # Number >= 1 as threshold for the number of failures and the count of distinct failure times
 def get_all_data(failure_threshold=4, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
@@ -83,6 +99,45 @@ def get_all_data(failure_threshold=4, distinct_threshold=2):
     weibull_data = {name: group for name, group in weibull_data.groupby('PART')}
 
     return weibull_data
+
+
+def refresh_cache():
+    global _weibull_cache
+    logger.info('Cache refresh for Weibull data started...')
+    try:
+        new_data = get_all_data()
+        with _cache_lock:
+            _weibull_cache = new_data
+        logger.info('Cache refresh for Weibull data completed...')
+    except Exception as e:
+        logger.error(f'Cache refresh failed: {e}')
+
+
+def get_cached_data(part=None, ):
+    with _cache_lock:
+        if _weibull_cache is None:
+            raise RuntimeError('Cache empty and not loaded yet.')
+
+        return _weibull_cache
+
+
+def get_failures_and_suspensions(part=None, data=None):
+    if data is None:
+        data = get_cached_data()
+
+    if part is None:
+        weibull_lists = {}
+        for part, df in data.items():
+            status_grouped = df.groupby('STATUS')['RUNNING_TIME']
+            weibull_lists[part] = {'failures': status_grouped.get_group('F').tolist() if 'F' in df['STATUS'].values else [],
+                                   'suspensions': status_grouped.get_group('S').tolist() if 'S' in df['STATUS'].values else []}
+
+        return weibull_lists
+    else:
+        part_df = data[part]
+
+        return {'failures': part_df[part_df['STATUS'] == 'F']['RUNNING_TIME'].tolist(),
+                'suspensions': part_df[part_df['STATUS'] == 'S']['RUNNING_TIME'].tolist()}
 
 
 def get_data(part):
@@ -149,3 +204,7 @@ def get_csv_data(query='above 3'):
     return weibull_data
 
 
+if __name__ == '__main__':
+    start = time.time()
+    print(get_all_data())
+    print(f'{time.time() - start} seconds to complete get_all_data()')

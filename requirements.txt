@@ -10,3 +10,4 @@ pandas==3.0.0
 numpy==2.4.0
 numdifftools==0.9.42
 autograd==1.8.0
+apscheduler==3.11.2

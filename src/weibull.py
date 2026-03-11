@@ -4,7 +4,7 @@ import data_weibull
 from predictr import Analysis
 from data_weibull import get_data
 from data_weibull import get_parts
-from data_weibull import get_all_data
+from data_weibull import get_failures_and_suspensions
 from data_weibull import get_csv_data
 from reliability.Utils import colorprint
 from reliability.Fitters import Fit_Everything
@@ -47,15 +47,20 @@ def plot_settings():
 
     return ax, fig, xmin, xmax
 
-
+#ToDo: Access to data outsourcen and only one time for every part --> include it in the automatic weibull and give data as input for the 4 weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_2p(part, ci=0.95, save_path=None):
+def weibull_2p(part, ci=0.95, save_path=None, data_p=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    data = get_data(part)
+    if __name__ == '__main__' and data_p is None:
+        data = get_data(part)
+    elif data_p is None:
+        data = get_failures_and_suspensions(part)
+    else:
+        data = data_p
 
     failure_size = len(data['failures'])
     suspension_size = len(data['suspensions'])
@@ -71,7 +76,7 @@ def weibull_2p(part, ci=0.95, save_path=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
-    plt.figure(figsize=(9.5, 6), dpi=100)
+    plt.figure()
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
@@ -96,11 +101,16 @@ def weibull_2p(part, ci=0.95, save_path=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 3P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_3p(part, ci=0.95, save_path=None):
+def weibull_3p(part, ci=0.95, save_path=None, data_p=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    data = get_data(part)
+    if __name__ == '__main__' and data_p is None:
+        data = get_data(part)
+    elif data_p is None:
+        data = get_failures_and_suspensions(part)
+    else:
+        data = data_p
 
     failure_size = len(data['failures'])
     suspension_size = len(data['suspensions'])
@@ -142,11 +152,16 @@ def weibull_3p(part, ci=0.95, save_path=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_mixture(part, ci=0.95, save_path=None):
+def weibull_mixture(part, ci=0.95, save_path=None, data_p=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    data = get_data(part)
+    if __name__ == '__main__' and data_p is None:
+        data = get_data(part)
+    elif data_p is None:
+        data = get_failures_and_suspensions(part)
+    else:
+        data = data_p
 
     failure_size = len(data['failures'])
     suspension_size = len(data['suspensions'])
@@ -178,7 +193,7 @@ def weibull_mixture(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -210,11 +225,16 @@ def weibull_mixture(part, ci=0.95, save_path=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Competing Risks with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_cr(part, ci=0.95, save_path=None):
+def weibull_cr(part, ci=0.95, save_path=None, data_p=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    data = get_data(part)
+    if __name__ == '__main__' and data_p is None:
+        data = get_data(part)
+    elif data_p is None:
+        data = get_failures_and_suspensions(part)
+    else:
+        data = data_p
 
     failure_size = len(data['failures'])
     suspension_size = len(data['suspensions'])
@@ -238,7 +258,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
         data['suspensions'] = None
 
     plt.figure()
-
+# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     wb = Fit_Weibull_CR(failures=data['failures'], right_censored=data['suspensions'],
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
@@ -246,7 +266,7 @@ def weibull_cr(part, ci=0.95, save_path=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α_1={wb.alpha_1:.4f}, β_1={wb.beta_1:.4f}, α_2={wb.alpha_2:.4f}, β_2={wb.beta_2:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings()
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -284,7 +304,10 @@ def weibull_fit_best(part, sort_by='BIC'):
 
     warnings.filterwarnings("ignore", category=FutureWarning, message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated")
 
-    data = get_data(part)
+    if __name__ == '__main__':
+        data = get_data(part)
+    else:
+        data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
     distinct_failure_count = len(set(data['failures']))
@@ -339,7 +362,7 @@ def weibull_fit_best(part, sort_by='BIC'):
     wb_best_distribution_name = wb.best_distribution_name
     #print(wb_data_fit_all.to_string())
 
-    return wb_data_fit_all, wb_best_distribution_name
+    return wb_data_fit_all, wb_best_distribution_name, data
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -401,7 +424,7 @@ def automated_weibull():
     parts_best_distribution_names = []
 
     for part in part_names_hit:
-        wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
+        wb_data_fit_all, wb_best_distribution_name, _ = weibull_fit_best(part=part, sort_by=sort_by)
 
         wb_data_fit_all['PART'] = part
 
@@ -463,12 +486,12 @@ def manual_weibull(part):
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
-    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=None),
-                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=None),
-                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=None),
-                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=None)}
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=None, data_p=data),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=None, data_p=data),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data_p=data),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=None, data_p=data),}
 
-    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
+    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
 
     compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
 
@@ -494,12 +517,12 @@ def generate_graph_new(part, sort_by='BIC', ci=0.95):
 
     buffer = io.BytesIO()   # Save plot in RAM
 
-    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=buffer),
-                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=buffer),
-                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer),
-                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=buffer)}
+    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data_p=data),
+                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data_p=data),
+                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer, data_p=data),
+                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=buffer, data_p=data),}
 
-    wb_data_fit_all, wb_best_distribution_name = weibull_fit_best(part=part, sort_by=sort_by)
+    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
 
     compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
 
@@ -521,7 +544,10 @@ def generate_graph(part):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
-    data = get_data(part)
+    if __name__ == '__main__':
+        data = get_data(part)
+    else:
+        data = get_failures_and_suspensions(part)
 
     # Prepare the response
     buffer = io.BytesIO()   # buffer to keep the plot in RAM (instead of a file)
@@ -548,7 +574,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_2p('HCCTRV')
+    weibull_2p('HCCTRP')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
