@@ -6,7 +6,7 @@ import autograd.numpy as anp
 from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR, Fit_Weibull_2P, Fit_Weibull_3P
 
 
-
+# ToDo: Think of adjusting the number of xvals automated to the range of the failures, whats the best case?
 """
 Fisher Matrix based confidence intervals for 
 Weibull Mixture and Weibull Competing Risks
@@ -257,11 +257,11 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_a1, log_b1, log_a2, log_b2, prop):
+    def cdf_fn_log_mix(t, log_a1, log_b1, log_a2, log_b2, prop):
         return _mixture_cdf(t, np.exp(log_a1), np.exp(log_b1), np.exp(log_a2), np.exp(log_b2), prop)
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_mix,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -305,15 +305,21 @@ def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
     ])
 
     def neg_loglik(p):
-        return Fit_Weibull_CR.LL(anp.exp(p), T_f, T_rc)
+        p_orig = anp.array([
+            anp.exp(p[0]),
+            anp.exp(p[1]),
+            anp.exp(p[2]),
+            anp.exp(p[3]),
+        ])
+        return Fit_Weibull_CR.LL(p_orig, T_f, T_rc)
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_a1, log_b1, log_a2, log_b2):
+    def cdf_fn_log_cr(t, log_a1, log_b1, log_a2, log_b2):
         return _cr_cdf(t, np.exp(log_a1), np.exp(log_b1), np.exp(log_a2), np.exp(log_b2))
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_cr,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -375,11 +381,11 @@ def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_alpha, log_beta):
+    def cdf_fn_log_2p(t, log_alpha, log_beta):
         return _weibull_cdf(t, np.exp(log_alpha), np.exp(log_beta))
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_2p,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -445,11 +451,11 @@ def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_alpha, log_beta, gamma):
+    def cdf_fn_log_3p(t, log_alpha, log_beta, gamma):
         return _weibull_3p_cdf(t, np.exp(log_alpha), np.exp(log_beta), gamma)
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_3p,
         params=params,
         cov=cov,
         xvals=xvals,

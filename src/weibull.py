@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
-import data_weibull
 from predictr import Analysis
 from data_weibull import get_data
 from data_weibull import get_parts
@@ -29,7 +28,7 @@ import matplotlib.pyplot as plt
 #-----------------------------------------------------------------------------------------------------------------------
 # Plot settings
 #-----------------------------------------------------------------------------------------------------------------------
-def plot_settings():
+def plot_settings(fit, upper_quantile=0.999):
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
@@ -40,14 +39,31 @@ def plot_settings():
         label.set_visible(i < 3 or (i - 3) % 2 == 0)
 
     xmin, xmax = ax.get_xlim()
-    ax.set_xlim(xmin * 0.8, xmax * 1.2)
+    x_at_upper = fit.distribution.quantile(upper_quantile)
+    xmax_new = max(xmax, x_at_upper)
+    ax.set_xlim(xmin * 0.8, xmax_new * 1.2)
 
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
 
-    return ax, fig, xmin, xmax
+    return ax, fig, xmin, xmax_new
 
-#ToDo: Access to data outsourcen and only one time for every part --> include it in the automatic weibull and give data as input for the 4 weibull distributions
+
+def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
+    x_at_upper = fit.distribution.quantile(upper_quantile)
+
+    log_span_lib = (np.log10(max(fit_data['failures'])) + 1) - (np.log10(min(fit_data['failures'])) - 3)
+    points_lib = 1000
+    density_lib = points_lib / log_span_lib
+
+    log_span_own = np.log10(x_at_upper) - (np.log10(max(fit_data['failures'])) + 1)
+    n_points = int(density_lib * log_span_own)
+
+    xvals = np.logspace(np.log10(max(fit_data['failures'])) + 1, np.log10(x_at_upper), n_points)
+
+    return xvals, n_points
+
+#ToDo: Outsource access to data and only one time for every part --> include it in the automatic weibull and give data as input for the 4 weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
@@ -86,7 +102,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data_p=None):
                         label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
-    ax, fig,_ ,_ = plot_settings()
+    ax, fig,_ ,_ = plot_settings(wb)
 
     if save_path:
         plt.savefig(save_path)
@@ -136,7 +152,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data_p=None):
                         label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
-    ax, fig, _, _ = plot_settings()
+    ax, fig, _, _ = plot_settings(wb)
     ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
 
     if save_path:
@@ -152,6 +168,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data_p=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
+# ToDo: For Mixture and Competing Risks adjust the shown distribution range for larger x-values
 def weibull_mixture(part, ci=0.95, save_path=None, data_p=None):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -193,12 +210,16 @@ def weibull_mixture(part, ci=0.95, save_path=None, data_p=None):
                         CI=ci,
                         label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
 
+    xvals, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+
+    wb.distribution.CDF(xvals=xvals, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
+
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
-    ax, fig, xmin, xmax = plot_settings()
+    ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 800)
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
     lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
@@ -264,14 +285,18 @@ def weibull_cr(part, ci=0.95, save_path=None, data_p=None):
                         show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                         optimizer='best',                                  # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
                         CI=ci,
-                        label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
+                        label=f'Weibull Competing Risk fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
+
+    xvals, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+
+    wb.distribution.CDF(xvals=xvals, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
-    ax, fig, xmin, xmax = plot_settings()
+    ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
     # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 800)
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
     lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
 
@@ -298,6 +323,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data_p=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
+# ToDo: If less than 5 distinct failures --> no Mixture and if less than 4 distinct failures no CR model fit
 def weibull_fit_best(part, sort_by='BIC'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -574,7 +600,8 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_2p('HCCTRP')
+    weibull_mixture('HCCFISA')
+    weibull_mixture('HCCTRV')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
