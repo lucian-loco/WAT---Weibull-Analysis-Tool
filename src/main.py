@@ -35,16 +35,30 @@ def get_drawio_lib_urls():
     return drawio_lib_urls
 
 
-def render_drawio(document, format):
+def get_mimetype(format):
+    if format == 'drawio':
+        return 'text/drawio'
+    elif format == 'pdf':
+        return 'application/pdf'
+    elif format == 'png':
+        return 'image/png'
+    else:
+        raise RuntimeError('Unsupported format: ' + format)
+
+
+def export_drawio(document, format):
+    if format not in ('pdf', 'png', 'drawio'):
+        raise RuntimeError('Unsupported format: ' + format)
+
+    if format == 'drawio':  # nothing to do, just return the document as is
+        return io.BytesIO(document.encode('utf-8'))
+
     if drawio_export_server == '':
-        raise RuntimeError('DRAWIO_EXPORT_URL is not configured')
+        raise RuntimeError('DRAWIO_EXPORT_URL is not configured (required for exporting to pdf/png/svg)')
 
     response = requests.post(
         drawio_export_server,
-        data={
-            'format': format,
-            'xml': document
-        }
+        data = {'format': format, 'xml': document}
     )
 
     response.raise_for_status()
@@ -160,48 +174,25 @@ def route_crate_edit():
 @app.route('/crate/get', methods=['GET'])
 def route_crate_get():
     try:
-        crate_name = get_crate_name(request.args)
+        # crate_name = get_crate_name(request.args)
         graph = make_crate_graph(request.args)
-
-        if graph is None:
-            raise RuntimeError('Crate name or ID must be provided')
-
         format = request.args.get('format', 'drawio')
 
-        if format == 'drawio':
-            mimetype = 'text/drawio'
-            buffer = graph  # not much to do
+        if graph is None:
+            raise RuntimeError('Crate name (position) or ID must be provided')
 
-        elif format in ('pdf', 'png'):
-            # use draw.io CLI to convert the graph to the requested format
-            mimetype = 'application/pdf' if format == 'pdf' else 'image/png'
-            exporter = drawio.Exporter()
-
-            buffer = io.BytesIO(exporter.convert(
-                input_data=graph.read(),
-                output_format=format,
-                output_file=None,
-                return_bytes=True,
-                scale=1.0,
-                border=0,
-                transparent=False
-            ))
-
-            buffer.seek(0)
-
-        else:
-            raise RuntimeError('Unsupported format: ' + format)
+        document = graph.getvalue().decode('utf-8')
 
     except (RuntimeError, ValueError) as e:
         return 'Crate layout cannot be generated: ' + str(e), 400
 
-    return send_file(buffer, mimetype=mimetype, as_attachment=True,
-                      download_name=f'{crate_name}.{format}')
+    return send_file(export_drawio(document, format), mimetype=get_mimetype(format))
 
 
 @app.route('/crate/stencil/get', methods=['GET'])
 def route_crate_stencil_get():
     try:
+        format = 'png'
         part = request.args.get('part')
         scale = request.args.get('scale', None, type=float)
         max_size = request.args.get('maxsize', None, type=float)
@@ -215,7 +206,7 @@ def route_crate_stencil_get():
     except (RuntimeError, ValueError) as e:
         return 'Stencil cannot be shown: ' + str(e), 400
 
-    return send_file(render_drawio(document, 'png'), mimetype='image/png')
+    return send_file(export_drawio(document, format), mimetype=get_mimetype(format))
 
 
 @app.route('/whiterabbit')
