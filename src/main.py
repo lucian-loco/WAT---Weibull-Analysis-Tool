@@ -119,7 +119,7 @@ def route_crate_new():
     return render_template('drawio.html', drawio_libs=drawio_libs)
 
 
-def make_crate_graph(args):
+def make_crate_graph(args, scale=None, max_size=None):
     crate_name = args.get('name', None)
     crate_id = args.get('id', None)
 
@@ -134,7 +134,7 @@ def make_crate_graph(args):
 
     version = args.get('version', 'TODAY')
     face = layout.Face.from_str(args.get('face', 'front'))
-    return crate.generate_graph_crate(crate_id, version, face)
+    return crate.generate_graph_crate(crate_id, version, face, scale, max_size)
 
 
 def get_crate_name(args):
@@ -175,7 +175,9 @@ def route_crate_edit():
 def route_crate_get():
     try:
         # crate_name = get_crate_name(request.args)
-        graph = make_crate_graph(request.args)
+        scale = request.args.get('scale', None, type=float)
+        max_size = request.args.get('maxsize', None, type=float)
+        graph = make_crate_graph(request.args, scale, max_size)
         format = request.args.get('format', 'drawio')
 
         if graph is None:
