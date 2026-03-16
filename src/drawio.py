@@ -571,96 +571,6 @@ class Generator:
             return uid
 
 
-class Exporter:
-    def __init__(self, drawio_path="drawio"):
-        self.drawio_path = drawio_path
-
-    def convert(
-        self,
-        input_data: Union[str, bytes, Path],
-        output_format: str = "png",
-        output_file: Union[str, Path, None] = None,
-        return_bytes: bool = False,
-        **export_settings,
-    ) -> Union[Path, bytes]:
-        """
-        Convert draw.io input (file path or XML content) to PNG or PDF.
-
-        Parameters:
-        - input_data: path to .drawio/.xml file OR raw XML content as str/bytes.
-        - output_format: 'png' or 'pdf'.
-        - output_file: path to save output (only if return_bytes=False).
-        - return_bytes: if True, returns output as bytes instead of saving.
-        - export_settings: draw.io export options like scale, border, transparent, etc.
-
-        Returns:
-        - Path to file (if return_bytes=False) or bytes (if return_bytes=True).
-        """
-        if output_format not in ["png", "pdf"]:
-            raise ValueError("Only 'png' and 'pdf' export formats are supported.")
-
-        is_raw = isinstance(input_data, bytes) # and not Path(input_data).exists()
-
-        if is_raw:
-            # Save input XML to temp file
-            with tempfile.NamedTemporaryFile(suffix=".drawio", delete=False, mode="wb") as tmp_in:
-                tmp_in.write(input_data.encode() if isinstance(input_data, str) else input_data)
-                input_path = Path(tmp_in.name)
-        else:
-            input_path = Path(input_data)
-
-        if return_bytes:
-            tmp_out = tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False)
-            output_path = Path(tmp_out.name)
-            tmp_out.close()
-        else:
-            output_path = Path(output_file) if output_file else input_path.with_suffix(f".{output_format}")
-
-        cmd = self._build_command(input_path, output_path, output_format, export_settings)
-
-        print("Running command:", " ".join(cmd))
-        subprocess.run(cmd, check=True)
-
-        result = None
-        if return_bytes:
-            with open(output_path, "rb") as f:
-                result = f.read()
-            os.remove(output_path)
-        else:
-            result = output_path
-
-        if is_raw:
-            os.remove(input_path)
-
-        return result
-
-    def _build_command(self, input_path: Path, output_path: Path, output_format: str, export_settings: dict):
-        cmd = [
-            self.drawio_path,
-            "--no-sandbox",
-            "--disable-gpu",
-            "--export",
-            "--format", output_format,
-            "--output", str(output_path),
-            str(input_path)
-        ]
-
-        if export_settings.get("scale"):
-            cmd.extend(["--scale", str(export_settings["scale"])])
-        if export_settings.get("border") is not None:
-            cmd.extend(["--border", str(export_settings["border"])])
-        if export_settings.get("transparent"):
-            cmd.append("--transparent")
-        if export_settings.get("width"):
-            cmd.extend(["--width", str(export_settings["width"])])
-        if export_settings.get("height"):
-            cmd.extend(["--height", str(export_settings["height"])])
-        if export_settings.get("embed_fonts"):
-            cmd.append("--embed-fonts")
-
-        return cmd
-
-
 if __name__ == '__main__':
     generator = Generator()
     generator.load_library('drawio/WFIP.xml')
@@ -686,6 +596,3 @@ if __name__ == '__main__':
     generator.add_shape('WFIP', 'TAP BOX', 30, 30)
 
     generator.save('test.drawio')
-
-    exporter = Exporter()
-    exporter.convert('test.drawio', 'png', 'test.png', scale=2, transparent=False)
