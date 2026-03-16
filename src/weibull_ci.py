@@ -106,7 +106,11 @@ def _compute_covariance(neg_loglik_fn, params):
     grad_fn = autograd.grad(neg_loglik_fn)
     hess_fn = autograd.jacobian(grad_fn)
 
-    H = hess_fn(params)
+    try:
+        H = hess_fn(params)
+    except Exception as e:
+        warnings.warn(f'Hessian computation failed: {e}', UserWarning)
+        return None
 
     try:
         cov = np.linalg.inv(H)

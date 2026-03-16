@@ -20,6 +20,10 @@ if [ -z "$GUNICORN_LOG_LEVEL" ]; then
     GUNICORN_LOG_LEVEL="info"
 fi
 
+if [ -z "$WEIBULL_CACHE_ENABLED" ]; then
+    WEIBULL_CACHE_ENABLED="true"
+fi
+
 
 # TMP_DIR="$(mktemp -d)"
 TMP_DIR="/tmp/hit-data-cache"

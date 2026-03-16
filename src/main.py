@@ -10,7 +10,7 @@ import io
 import requests
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from apscheduler.schedulers.background import BackgroundScheduler
-from data_weibull import refresh_cache
+from data_weibull import refresh_cache, weibull_cache_enabled
 import atexit
 from markupsafe import escape
 
@@ -19,12 +19,15 @@ drawio_export_server = os.environ.get('DRAWIO_EXPORT_URL', '')
 build_date = os.environ.get('APP_BUILD_DATE', 'unknown')
 commit_hash = os.environ.get('APP_GIT_COMMIT', 'unknown')
 
-refresh_cache()
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_cache, 'cron', hour=2, minute=0)
-scheduler.start()
-atexit.register(lambda: scheduler.shutdown())
+if weibull_cache_enabled:
+    refresh_cache()
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(refresh_cache, 'cron', hour=2, minute=0)
+    scheduler.start()
+
+    atexit.register(lambda: scheduler.shutdown())
 
 
 # TODO not very elegant, think of a better way
@@ -235,4 +238,4 @@ def route_wr_network():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8888, host='0.0.0.0', threaded=True, use_reloader=False)
+    app.run(debug=True, port=8888, host='0.0.0.0', threaded=True, use_reloader=not weibull_cache_enabled)
