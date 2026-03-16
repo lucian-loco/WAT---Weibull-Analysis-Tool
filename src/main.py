@@ -13,6 +13,8 @@ from markupsafe import escape
 
 app = Flask(__name__)
 drawio_export_server = os.environ.get('DRAWIO_EXPORT_URL', '')
+build_date = os.environ.get('APP_BUILD_DATE', 'unknown')
+commit_hash = os.environ.get('APP_GIT_COMMIT', 'unknown')
 
 # TODO not very elegant, think of a better way
 @functools.cache
@@ -67,7 +69,7 @@ def export_drawio(document, format):
 
 @app.route('/')
 def route_main():
-    return render_template('index.html')
+    return render_template('index.html', build_date=build_date, commit_hash=commit_hash)
 
 
 @app.route('/favicon.ico')
