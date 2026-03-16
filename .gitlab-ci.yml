@@ -12,7 +12,7 @@ build_kaniko_command:
         # Prepare Kaniko configuration file
         - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
         # Build and push the image from the Dockerfile at the root of the project.
-        - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $IMAGE_DESTINATION
+        - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $IMAGE_DESTINATION --build-arg GIT_COMMIT=$CI_COMMIT_SHORT_SHA --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
         # Print the full registry path of the pushed image
         - echo "Image pushed successfully to ${IMAGE_DESTINATION}"
     only:

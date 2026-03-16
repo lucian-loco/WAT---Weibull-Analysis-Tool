@@ -16,6 +16,8 @@ PAGE_WIDTH = 800
 PAGE_HEIGHT = 600
 TITLE_HEIGHT = 20
 
+DEFAULT_FONT_SIZE = 12
+
 
 @dataclass
 class Module:
@@ -146,25 +148,43 @@ def get_crate_data(crate_id, version='TODAY'):
     return crate
 
 
-def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
+def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT, scale=None, max_size=None):
     logger.debug('Generating crate graph for %s', crate)
+
+    if scale is not None and max_size is not None:
+        logger.warning('Both scale and max_size parameters are provided, max_size will be ignored')
+        max_size = None
+    elif scale is None and max_size is None:
+        scale = 1.0
+
+    if max_size is not None:
+        # Fit the rendered page to a square of side max_size.
+        scale = min(max_size / PAGE_WIDTH, max_size / PAGE_HEIGHT)
+
+    if scale is None or scale <= 0:
+        raise ValueError('Scale must be greater than 0')
 
     # Get crate & module data
     crate = get_crate_data(crate, version)
 
-    generator.clear_page(PAGE_WIDTH, PAGE_HEIGHT)
-    scale_hor = PAGE_WIDTH / crate.width
-    scale_ver = (PAGE_HEIGHT - TITLE_HEIGHT) / crate.height
-    scale = min(scale_hor, scale_ver)
+    page_width = PAGE_WIDTH * scale
+    page_height = PAGE_HEIGHT * scale
+    title_height = TITLE_HEIGHT * scale
 
-    start_x = (PAGE_WIDTH - crate.width * scale) / 2  # center the crate layout
-    start_y = TITLE_HEIGHT  # draw the crate layout right below the title
+    generator.clear_page(page_width, page_height)
+    scale_hor = page_width / crate.width
+    scale_ver = (page_height - title_height) / crate.height
+    layout_scale = min(scale_hor, scale_ver)
+
+    start_x = (page_width - crate.width * layout_scale) / 2  # center the crate layout
+    start_y = title_height  # draw the crate layout right below the title
 
     # Crate name label
-    generator.add_box(0, 0, PAGE_WIDTH, TITLE_HEIGHT, text=crate.position.upper())
+    generator.add_box(0, 0, page_width, title_height, text=crate.position.upper(),
+                       style=drawio.Style(fontSize=scale * DEFAULT_FONT_SIZE, fontStyle=drawio.FontStyle.BOLD))
 
     # Draw the crate outline
-    generator.add_box(start_x, start_y, crate.width * scale, crate.height * scale, style=drawio_styles.crate_outline)
+    generator.add_box(start_x, start_y, crate.width * layout_scale, crate.height * layout_scale, style=drawio_styles.crate_outline)
 
     # Draw shapes/boxes representing the modules in each slot
     for module in crate.modules:
@@ -177,17 +197,17 @@ def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
 
 
         # Calculate the shape box coordinates
-        scaled_width = module.width.length * crate.x_slot_size * scale
-        scaled_height = module.height.length * crate.y_slot_size * scale
+        scaled_width = module.width.length * crate.x_slot_size * layout_scale
+        scaled_height = module.height.length * crate.y_slot_size * layout_scale
 
-        pos_x = start_x + (module.width.start - 1) * crate.x_slot_size * scale
+        pos_x = start_x + (module.width.start - 1) * crate.x_slot_size * layout_scale
 
         # For the back face, use mirror transformation (revert X position)
         if face == layout.Face.BACK:
-            pos_x = PAGE_WIDTH - pos_x - scaled_width
+            pos_x = page_width - pos_x - scaled_width
 
         # In LayoutDB Y=0 is at the bottom, in Draw.io Y=0 is at the top, so revert the Y position
-        pos_y = start_y + (crate.heightSlots - module.height.end) * crate.y_slot_size * scale
+        pos_y = start_y + (crate.heightSlots - module.height.end) * crate.y_slot_size * layout_scale
 
 
         # Find the appropriate shape, if available
@@ -208,18 +228,20 @@ def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
         # Handle rotation of the module
         if module_horizontal:
             if shape_horizontal:
-                shape_style = drawio_styles.shape_h
+                shape_style = drawio_styles.shape_h.copy()
                 rotate = False
             else:
-                shape_style = drawio_styles.shape_v
+                shape_style = drawio_styles.shape_v.copy()
                 rotate = True
         else:
             if shape_horizontal:
-                shape_style = drawio_styles.shape_v
+                shape_style = drawio_styles.shape_v.copy()
                 rotate = True
             else:
                 shape_style = drawio_styles.shape_h
                 rotate = False
+
+        shape_style.fontSize.set(scale * DEFAULT_FONT_SIZE)  # scale the font size as well
 
         if rotate:
             (scaled_width, scaled_height) = (scaled_height, scaled_width)
@@ -247,20 +269,23 @@ def generate_graph_crate(crate, version='TODAY', face=layout.Face.FRONT):
     return buffer
 
 
-def generate_graph_stencil(stencil, scale=1.0):
+def generate_graph_stencil(stencil, scale=None, max_size=None):
     logger.debug('Generating stencil graph for %s', stencil)
-    generator = drawio.Generator()
 
-    for filepath in glob.glob(os.path.join('drawio', '*.xml')):
-        try:
-            generator.load_library(filepath)
-        except:
-            logger.error(f'Could not load library {filepath}')
+    if scale and max_size:
+        logger.warning('Both scale and max_size parameters are provided, max_size will be ignored')
+        max_size = None
+    elif not scale and not max_size:
+        scale = 1.0
 
     try:
         # Find the shape to get its dimensions
         library_name = generator.find_shape_library(stencil)
         shape = generator.get_shape(library_name[0], stencil)
+
+        if max_size:
+            # Calculate the scale to fit within the maximum size
+            scale = min(max_size / shape.width, max_size / shape.height)
 
         generator.clear_page(shape.width * scale, shape.height * scale)
         generator.add_shape(library_name[0], stencil, 0, 0, shape.width * scale, shape.height * scale)
