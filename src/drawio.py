@@ -6,11 +6,18 @@ import string
 import random
 import html
 import os
-import subprocess
-import tempfile
-from pathlib import Path
 import copy
-from typing import Union
+
+
+class FontStyle:
+    """Bit flags for draw.io fontStyle values."""
+
+    NORMAL = 0
+    BOLD = 1
+    ITALIC = 2
+    UNDERLINE = 4
+    SHADOW = 8
+    STRIKETHROUGH = 16
 
 
 class StyleAttrAbstract:
@@ -150,6 +157,7 @@ class Style:
         'direction': StyleAttrEnum('direction', ('north', 'south', 'east', 'west')),
         'fillColor': StyleAttrColor('fillColor'),
         'fontSize': StyleAttrInt('fontSize'),
+        'fontStyle': StyleAttrInt('fontStyle'),     # see FontStyle class for bit flags
         'horizontal': StyleAttrBool('horizontal'),
         'html': StyleAttrBool('html'),
         'image': StyleAttrStr('image'),
