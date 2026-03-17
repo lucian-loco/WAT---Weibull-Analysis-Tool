@@ -6,7 +6,7 @@ import autograd.numpy as anp
 from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR, Fit_Weibull_2P, Fit_Weibull_3P
 
 
-
+# ToDo: Think of adjusting the number of xvals automated to the range of the failures, whats the best case?
 """
 Fisher Matrix based confidence intervals for 
 Weibull Mixture and Weibull Competing Risks
@@ -106,7 +106,11 @@ def _compute_covariance(neg_loglik_fn, params):
     grad_fn = autograd.grad(neg_loglik_fn)
     hess_fn = autograd.jacobian(grad_fn)
 
-    H = hess_fn(params)
+    try:
+        H = hess_fn(params)
+    except Exception as e:
+        warnings.warn(f'Hessian computation failed: {e}', UserWarning)
+        return None
 
     try:
         cov = np.linalg.inv(H)
@@ -125,7 +129,7 @@ def _compute_covariance(neg_loglik_fn, params):
     return cov
 
 
-def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return_sf, seed):
+def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return_sf, seed, min_failure=None):
     """
     Estimates confidence interval bounds via parametric Monte Carlo sampling.
 
@@ -173,8 +177,14 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     rng = np.random.default_rng(seed=seed)
     samples = rng.multivariate_normal(params, cov, size=n_samples)
 
+    # Filter samples with proportion factor out of (0,1) for Weibull Mixture
     if len(params) == 5:
-        valid = (samples[:, 4] >= 0) & (samples[:, 4] <= 1)
+        valid = (samples[:, 4] > 0) & (samples[:, 4] < 1)
+        samples = samples[valid]
+
+    # Filter samples with gamma < min(T_f) since it is not physical correct
+    if min_failure is not None:
+        valid = samples[:, 2] < min_failure
         samples = samples[valid]
 
     if len(samples) == 0:
@@ -189,7 +199,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
         lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
         upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
     else:
-        # Calculate the percentiles on the u-scale and transform afterwards back
+        # Calculate the percentiles on the u-scale and transform back afterward
         u_curves = _u_transform(curves)
         alpha_tail = (1.0 - CI) / 2.0
         u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
@@ -257,11 +267,11 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_a1, log_b1, log_a2, log_b2, prop):
+    def cdf_fn_log_mix(t, log_a1, log_b1, log_a2, log_b2, prop):
         return _mixture_cdf(t, np.exp(log_a1), np.exp(log_b1), np.exp(log_a2), np.exp(log_b2), prop)
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_mix,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -305,15 +315,21 @@ def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
     ])
 
     def neg_loglik(p):
-        return Fit_Weibull_CR.LL(anp.exp(p), T_f, T_rc)
+        p_orig = anp.array([
+            anp.exp(p[0]),
+            anp.exp(p[1]),
+            anp.exp(p[2]),
+            anp.exp(p[3]),
+        ])
+        return Fit_Weibull_CR.LL(p_orig, T_f, T_rc)
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_a1, log_b1, log_a2, log_b2):
+    def cdf_fn_log_cr(t, log_a1, log_b1, log_a2, log_b2):
         return _cr_cdf(t, np.exp(log_a1), np.exp(log_b1), np.exp(log_a2), np.exp(log_b2))
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_cr,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -340,8 +356,7 @@ def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
     fit           : Fit_Weibull_2P
                     Already fitted model object from the reliability library.
     xvals         : array-like
-                    x-values at which the CI is evaluated. Should be derived
-                    from the raw data range, not from ax.get_xlim().
+                    x-values at which the CI is evaluated.
     failures      : list or array
                     Failure times.
     right_censored: list or array, optional
@@ -375,11 +390,11 @@ def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_alpha, log_beta):
+    def cdf_fn_log_2p(t, log_alpha, log_beta):
         return _weibull_cdf(t, np.exp(log_alpha), np.exp(log_beta))
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_2p,
         params=params,
         cov=cov,
         xvals=xvals,
@@ -445,16 +460,17 @@ def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
     cov = _compute_covariance(neg_loglik, params)
 
-    def cdf_fn_log(t, log_alpha, log_beta, gamma):
+    def cdf_fn_log_3p(t, log_alpha, log_beta, gamma):
         return _weibull_3p_cdf(t, np.exp(log_alpha), np.exp(log_beta), gamma)
 
     return _sample_and_compute_bounds(
-        cdf_fn=cdf_fn_log,
+        cdf_fn=cdf_fn_log_3p,
         params=params,
         cov=cov,
         xvals=xvals,
         CI=CI,
         n_samples=n_samples,
         return_sf=return_sf,
-        seed=seed
+        seed=seed,
+        min_failure=min(T_f)
     )
