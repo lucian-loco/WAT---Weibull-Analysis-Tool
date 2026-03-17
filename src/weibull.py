@@ -3,7 +3,6 @@
 from predictr import Analysis
 from data_weibull import get_parts
 from data_weibull import get_failures_and_suspensions
-from reliability.Utils import colorprint
 from reliability.Fitters import Fit_Everything
 from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
@@ -87,14 +86,19 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    if ci == 0.0:
+        ci_type = 'none'
+        ci = 0.95  # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+    else:
+        ci_type = 'reliability'
+
     plt.figure()
-# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     try:
         wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                             show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                             method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                            CI_type='reliability', CI=ci,
+                            CI_type=ci_type, CI=ci,
                             label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
@@ -136,14 +140,19 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    if ci == 0.0:
+        ci_type = 'none'
+        ci = 0.95   # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+    else:
+        ci_type = 'reliability'
+
     plt.figure()
-# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     try:
         wb = Fit_Weibull_3P(failures=data['failures'], right_censored=data['suspensions'],
                             show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                             method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                            CI_type='reliability', CI=ci,
+                            CI_type=ci_type, CI=ci,
                             label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 3P fitting failed for "{part}": {e}')
@@ -194,6 +203,11 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    ci_mc = ci
+
+    if ci == 0.0:
+        ci = 0.95   # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+
     plt.figure()
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -214,20 +228,22 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
-    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+    if ci_mc != 0.0:
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
-    lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
+        lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+                                                     right_censored=data['suspensions'], CI=ci)
 
-    if lower is not None and upper is not None:
-        ax.fill_between(
-            xvals,
-            lower,
-            upper,
-            alpha=0.3,
-            # label=f"{int(ci * 100)}% Fisher CI"
-        )
-    #-------------------------------------------------------------------------------------------------------------------
+        if lower is not None and upper is not None:
+            ax.fill_between(
+                xvals,
+                lower,
+                upper,
+                alpha=0.3,
+                # label=f"{int(ci * 100)}% Fisher CI"
+            )
+        # --------------------------------------------------------------------------------------------------------------
 
     if save_path:
         plt.savefig(save_path)
@@ -270,6 +286,11 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    ci_mc = ci
+
+    if ci == 0.0:
+        ci = 0.95  # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+
     plt.figure()
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -290,20 +311,22 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
-    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+    if ci_mc != 0.0:
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
-    lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
+        lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+                                                right_censored=data['suspensions'], CI=ci)
 
-    if lower is not None and upper is not None:
-        ax.fill_between(
-            xvals,
-            lower,
-            upper,
-            alpha=0.3,
-            # label=f"{int(ci * 100)}% Fisher CI"
-        )
-    # -------------------------------------------------------------------------------------------------------------------
+        if lower is not None and upper is not None:
+            ax.fill_between(
+                xvals,
+                lower,
+                upper,
+                alpha=0.3,
+                # label=f"{int(ci * 100)}% Fisher CI"
+            )
+        # --------------------------------------------------------------------------------------------------------------
 
     if save_path:
         plt.savefig(save_path)
@@ -413,9 +436,9 @@ def validate_ci(value_str: str, default: float = 0.95):
         return default, None
     try:
         v = float(value_str)
-        if 0 < v < 1:
+        if 0 <= v < 1:
             return v, None
-        return None, "Please enter a value strictly between 0 and 1."
+        return None, "Please enter a value strictly between 0 and 1 or 0 for no confidence interval."
     except ValueError:
         return None, "Invalid input, please enter a number (e.g. 0.95)."
 
@@ -602,8 +625,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_mixture('HCCFISA')
-    weibull_mixture('HCCTRV')
+    manual_weibull(part='HCCTRV')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
