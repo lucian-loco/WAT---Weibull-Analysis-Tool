@@ -15,7 +15,6 @@ weibull_cache_enabled = os.environ.get('WEIBULL_CACHE_ENABLED', 'true').lower() 
 
 _weibull_cache = None
 _cache_lock = threading.Lock()
-_cache_was_loaded = False
 
 
 
@@ -161,13 +160,12 @@ def get_csv_data(query='above 3'):
 
 
 def refresh_cache():
-    global _weibull_cache, _cache_was_loaded
+    global _weibull_cache
     logger.info('Cache refresh for Weibull data started...')
     try:
         new_data = get_all_data()
         with _cache_lock:
             _weibull_cache = new_data
-            _cache_was_loaded = True
         logger.info('Cache refresh for Weibull data completed...')
     except ThresholdError as e:
         logger.error(f'Cache refresh failed due to invalid thresholds: {e}')
@@ -179,20 +177,14 @@ def refresh_cache():
 
 def _get_cached_or_direct_data(part=None):
     if weibull_cache_enabled:
-        with _cache_lock:
-            cache_loaded = _cache_was_loaded
-            cache_data = _weibull_cache
-
-        if not cache_loaded:
+        if _weibull_cache is None:
             logger.warning(f'Cache was never loaded - triggering refresh. This may take a moment...')
             refresh_cache()
-            with _cache_lock:
-                cache_data = _weibull_cache
 
-            if cache_data is None:
-                raise NoCacheError('Cache refresh failed. No data available.')
+        if _weibull_cache is None:
+            raise NoCacheError('Cache refresh failed. No data available.')
 
-        return cache_data
+        return _weibull_cache
 
     else:
         if part is not None:
@@ -204,6 +196,7 @@ def _get_cached_or_direct_data(part=None):
 
 
 def get_failures_and_suspensions(part=None):
+    # This exception is needed since the return of data_weibull.get_parts() is already formatted correctly
     if not weibull_cache_enabled and part is not None:
         return _get_cached_or_direct_data(part=part)
 
