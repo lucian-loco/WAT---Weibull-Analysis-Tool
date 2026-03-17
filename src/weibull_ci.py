@@ -129,7 +129,7 @@ def _compute_covariance(neg_loglik_fn, params):
     return cov
 
 
-def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return_sf, seed):
+def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return_sf, seed, min_failure=None):
     """
     Estimates confidence interval bounds via parametric Monte Carlo sampling.
 
@@ -177,8 +177,14 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     rng = np.random.default_rng(seed=seed)
     samples = rng.multivariate_normal(params, cov, size=n_samples)
 
+    # Filter samples with proportion factor out of (0,1) for Weibull Mixture
     if len(params) == 5:
-        valid = (samples[:, 4] >= 0) & (samples[:, 4] <= 1)
+        valid = (samples[:, 4] > 0) & (samples[:, 4] < 1)
+        samples = samples[valid]
+
+    # Filter samples with gamma < min(T_f) since it is not physical correct
+    if min_failure is not None:
+        valid = samples[:, 2] < min_failure
         samples = samples[valid]
 
     if len(samples) == 0:
@@ -465,5 +471,6 @@ def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
         CI=CI,
         n_samples=n_samples,
         return_sf=return_sf,
-        seed=seed
+        seed=seed,
+        min_failure=min(T_f)
     )
