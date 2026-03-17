@@ -24,7 +24,7 @@ if weibull_cache_enabled:
     refresh_cache()
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(refresh_cache, 'cron', hour=2, minute=0)
+    scheduler.add_job(refresh_cache, 'cron', hour=1, minute=0)
     scheduler.start()
 
     atexit.register(lambda: scheduler.shutdown())
