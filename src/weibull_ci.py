@@ -193,7 +193,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
         lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
         upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
     else:
-        # Calculate the percentiles on the u-scale and transform afterwards back
+        # Calculate the percentiles on the u-scale and transform back afterward
         u_curves = _u_transform(curves)
         alpha_tail = (1.0 - CI) / 2.0
         u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
@@ -350,8 +350,7 @@ def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
     fit           : Fit_Weibull_2P
                     Already fitted model object from the reliability library.
     xvals         : array-like
-                    x-values at which the CI is evaluated. Should be derived
-                    from the raw data range, not from ax.get_xlim().
+                    x-values at which the CI is evaluated.
     failures      : list or array
                     Failure times.
     right_censored: list or array, optional
