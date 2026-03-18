@@ -54,10 +54,14 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
     points_lib = 1000
     density_lib = points_lib / log_span_lib
 
-    log_span_own = np.log10(x_at_upper) - (np.log10(max(fit_data['failures'])) + 1)
-    n_points = int(density_lib * log_span_own)
+    if (np.log10(x_at_upper)) > (np.log10(max(fit_data['failures'])) + 1):
+        log_span_own = np.log10(x_at_upper) - (np.log10(max(fit_data['failures'])) + 1)
+        n_points = int(density_lib * log_span_own)
 
-    xvals = np.logspace(np.log10(max(fit_data['failures'])) + 1, np.log10(x_at_upper), n_points)
+        xvals = np.logspace(np.log10(max(fit_data['failures'])) + 1, np.log10(x_at_upper), n_points)
+    else:
+        xvals = None
+        n_points = 0
 
     return xvals, n_points
 
@@ -220,9 +224,14 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull Mixture fitting failed for "{part}": {e}')
 
-    xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    try:
+        xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    except Exception as e:
+        logger.warning(f'plot_extension_mix_cr failed for "{part}": {e}')
+        xvals_ext, n_points = None, 0
 
-    wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
+    if xvals_ext is not None:
+        wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
@@ -303,9 +312,14 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull Competing Risk fitting failed for "{part}": {e}')
 
-    xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    try:
+        xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    except Exception as e:
+        logger.warning(f'plot_extension_mix_cr failed for "{part}": {e}')
+        xvals_ext, n_points = None, 0
 
-    wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
+    if xvals_ext is not None:
+        wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
@@ -625,7 +639,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    manual_weibull(part='HCCTRV')
+    weibull_mixture(part='HCCVSWB')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
