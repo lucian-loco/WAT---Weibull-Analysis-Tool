@@ -238,4 +238,5 @@ def route_wr_network():
 
 
 if __name__ == '__main__':
+    # If weibull_cache_enabled is used then use_reloader is deactivated otherwise it would load the cache everytime again something is changed
     app.run(debug=True, port=8888, host='0.0.0.0', threaded=True, use_reloader=not weibull_cache_enabled)

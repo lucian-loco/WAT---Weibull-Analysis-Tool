@@ -45,9 +45,9 @@ def ask_ci(default: float = 0.95):
             return default
         try:
             value = float(user_input)
-            if 0 < value < 1:
+            if 0 <= value < 1:
                 return value
             else:
-                print("  → Please enter a value strictly between 0 and 1.")
+                print("  → Please enter a value strictly between 0 and 1 or 0 for no confidence interval.")
         except ValueError:
             print("  → Invalid input, please enter a number (e.g. 0.95).")

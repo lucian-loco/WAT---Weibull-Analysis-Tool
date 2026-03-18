@@ -2,8 +2,8 @@
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
 from predictr import Analysis
 from data_weibull import get_parts
+from data_weibull import get_cache_timestamp
 from data_weibull import get_failures_and_suspensions
-from reliability.Utils import colorprint
 from reliability.Fitters import Fit_Everything
 from reliability.Fitters import Fit_Weibull_2P
 from reliability.Fitters import Fit_Weibull_3P
@@ -19,6 +19,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogLocator, FuncFormatter
 from utils import get_logger
 logger = get_logger(__name__)
 
@@ -27,23 +28,50 @@ logger = get_logger(__name__)
 #-----------------------------------------------------------------------------------------------------------------------
 # Plot settings
 #-----------------------------------------------------------------------------------------------------------------------
+def make_minor_label_formatter(decade_span):
+    def _minor_label_formatter(x, pos):
+        if decade_span > 2.9:
+            return ''
+        log = np.floor(np.log10(x))
+        mantissa = round(x / (10 ** log), 1)
+        if mantissa == 2.0:
+            return f'$2 \\times 10^{{{int(log)}}}$'
+        if mantissa == 5.0:
+            return f'$5 \\times 10^{{{int(log)}}}$'
+        return ''
+    return _minor_label_formatter
+
+
 def plot_settings(fit, upper_quantile=0.999):
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     plt.legend(loc='upper left')
     ax.set_ylim(0.001, 0.999)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
 
     xmin, xmax = ax.get_xlim()
     x_at_upper = fit.distribution.quantile(upper_quantile)
     xmax_new = max(xmax, x_at_upper)
     ax.set_xlim(xmin * 0.8, xmax_new * 1.2)
 
+    decade_span = np.log10((xmax_new * 1.2)) - np.log10((xmin * 0.8))
+
+    ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=6))
+    ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs='auto', numticks=10))
+    ax.xaxis.set_minor_formatter(FuncFormatter(make_minor_label_formatter(decade_span)))
+
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
+
+    # Cache timestamp box
+    ts = get_cache_timestamp()
+    if ts is not None:
+        ts_text = f'Data as of: {ts.strftime("%d.%m.%Y %H:%M")}'
+    else:
+        ts_text = 'Data as of: unknown'
+
+    ax.text(0.99, 0.01, ts_text, transform=ax.transAxes, fontsize=8, horizontalalignment='right', verticalalignment='bottom',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray'))
 
     return ax, fig, xmin, xmax_new
 
@@ -55,10 +83,14 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
     points_lib = 1000
     density_lib = points_lib / log_span_lib
 
-    log_span_own = np.log10(x_at_upper) - (np.log10(max(fit_data['failures'])) + 1)
-    n_points = int(density_lib * log_span_own)
+    if (np.log10(x_at_upper)) > (np.log10(max(fit_data['failures'])) + 1):
+        log_span_own = np.log10(x_at_upper) - (np.log10(max(fit_data['failures'])) + 1)
+        n_points = int(density_lib * log_span_own)
 
-    xvals = np.logspace(np.log10(max(fit_data['failures'])) + 1, np.log10(x_at_upper), n_points)
+        xvals = np.logspace(np.log10(max(fit_data['failures'])) + 1, np.log10(x_at_upper), n_points)
+    else:
+        xvals = None
+        n_points = 0
 
     return xvals, n_points
 
@@ -87,14 +119,19 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    if ci == 0.0:
+        ci_type = 'none'
+        ci = 0.95  # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+    else:
+        ci_type = 'reliability'
+
     plt.figure()
-# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     try:
         wb = Fit_Weibull_2P(failures=data['failures'], right_censored=data['suspensions'],
                             show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                             method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                            CI_type='reliability', CI=ci,
+                            CI_type=ci_type, CI=ci,
                             label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
@@ -136,14 +173,19 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    if ci == 0.0:
+        ci_type = 'none'
+        ci = 0.95   # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+    else:
+        ci_type = 'reliability'
+
     plt.figure()
-# ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
     try:
         wb = Fit_Weibull_3P(failures=data['failures'], right_censored=data['suspensions'],
                             show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
                             method='MLE', optimizer='best',                     # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
-                            CI_type='reliability', CI=ci,
+                            CI_type=ci_type, CI=ci,
                             label=f'Weibull 3 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 3P fitting failed for "{part}": {e}')
@@ -194,6 +236,11 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    ci_mc = ci
+
+    if ci == 0.0:
+        ci = 0.95   # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+
     plt.figure()
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -206,28 +253,35 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull Mixture fitting failed for "{part}": {e}')
 
-    xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    try:
+        xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    except Exception as e:
+        logger.warning(f'plot_extension_mix_cr failed for "{part}": {e}')
+        xvals_ext, n_points = None, 0
 
-    wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
+    if xvals_ext is not None:
+        wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
-    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+    if ci_mc != 0.0:
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
-    lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
+        lower, upper = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+                                                     right_censored=data['suspensions'], CI=ci)
 
-    if lower is not None and upper is not None:
-        ax.fill_between(
-            xvals,
-            lower,
-            upper,
-            alpha=0.3,
-            # label=f"{int(ci * 100)}% Fisher CI"
-        )
-    #-------------------------------------------------------------------------------------------------------------------
+        if lower is not None and upper is not None:
+            ax.fill_between(
+                xvals,
+                lower,
+                upper,
+                alpha=0.3,
+                # label=f"{int(ci * 100)}% Fisher CI"
+            )
+        # --------------------------------------------------------------------------------------------------------------
 
     if save_path:
         plt.savefig(save_path)
@@ -270,6 +324,11 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     if not data['suspensions']:
         data['suspensions'] = None
 
+    ci_mc = ci
+
+    if ci == 0.0:
+        ci = 0.95  # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
+
     plt.figure()
 # ToDo: Edit the CI_type and CI in the way that if CI=0 then CI_type='None'
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -282,28 +341,35 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull Competing Risk fitting failed for "{part}": {e}')
 
-    xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    try:
+        xvals_ext, n_points = plot_extension_mix_cr(fit=wb, fit_data=data)
+    except Exception as e:
+        logger.warning(f'plot_extension_mix_cr failed for "{part}": {e}')
+        xvals_ext, n_points = None, 0
 
-    wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
+    if xvals_ext is not None:
+        wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
-    # Calculation of the Confidence Interval:---------------------------------------------------------------------------
-    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+    if ci_mc != 0.0:
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
 
-    lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'], right_censored=data['suspensions'], CI=ci)
+        lower, upper = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+                                                right_censored=data['suspensions'], CI=ci)
 
-    if lower is not None and upper is not None:
-        ax.fill_between(
-            xvals,
-            lower,
-            upper,
-            alpha=0.3,
-            # label=f"{int(ci * 100)}% Fisher CI"
-        )
-    # -------------------------------------------------------------------------------------------------------------------
+        if lower is not None and upper is not None:
+            ax.fill_between(
+                xvals,
+                lower,
+                upper,
+                alpha=0.3,
+                # label=f"{int(ci * 100)}% Fisher CI"
+            )
+        # --------------------------------------------------------------------------------------------------------------
 
     if save_path:
         plt.savefig(save_path)
@@ -413,9 +479,9 @@ def validate_ci(value_str: str, default: float = 0.95):
         return default, None
     try:
         v = float(value_str)
-        if 0 < v < 1:
+        if 0 <= v < 1:
             return v, None
-        return None, "Please enter a value strictly between 0 and 1."
+        return None, "Please enter a value strictly between 0 and 1 or 0 for no confidence interval."
     except ValueError:
         return None, "Invalid input, please enter a number (e.g. 0.95)."
 
@@ -602,8 +668,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_mixture('HCCFISA')
-    weibull_mixture('HCCTRV')
+    manual_weibull(part='HCCBWDC')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
