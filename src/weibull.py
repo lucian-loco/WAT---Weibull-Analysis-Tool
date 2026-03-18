@@ -18,6 +18,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogLocator, FuncFormatter
 from utils import get_logger
 logger = get_logger(__name__)
 
@@ -26,20 +27,37 @@ logger = get_logger(__name__)
 #-----------------------------------------------------------------------------------------------------------------------
 # Plot settings
 #-----------------------------------------------------------------------------------------------------------------------
+def make_minor_label_formatter(decade_span):
+    def _minor_label_formatter(x, pos):
+        if decade_span > 2.9:
+            return ''
+        log = np.floor(np.log10(x))
+        mantissa = round(x / (10 ** log), 1)
+        if mantissa == 2.0:
+            return f'$2 \\times 10^{{{int(log)}}}$'
+        if mantissa == 5.0:
+            return f'$5 \\times 10^{{{int(log)}}}$'
+        return ''
+    return _minor_label_formatter
+
+
 def plot_settings(fit, upper_quantile=0.999):
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Failure probability')
     plt.legend(loc='upper left')
     ax.set_ylim(0.001, 0.999)
-    labels = ax.get_xticklabels()
-    for i, label in enumerate(labels):  # Prevents overlapping of x-axis' ticks
-        label.set_visible(i < 3 or (i - 3) % 2 == 0)
 
     xmin, xmax = ax.get_xlim()
     x_at_upper = fit.distribution.quantile(upper_quantile)
     xmax_new = max(xmax, x_at_upper)
     ax.set_xlim(xmin * 0.8, xmax_new * 1.2)
+
+    decade_span = np.log10((xmax_new * 1.2)) - np.log10((xmin * 0.8))
+
+    ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=6))
+    ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs='auto', numticks=10))
+    ax.xaxis.set_minor_formatter(FuncFormatter(make_minor_label_formatter(decade_span)))
 
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
@@ -639,7 +657,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_mixture(part='HCCVSWB')
+    manual_weibull(part='HCCBWDC')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
