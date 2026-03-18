@@ -21,6 +21,7 @@ FILES=(
     "P2.xml"
     "Patch.xml"
     "WFIP.xml"
+    "WR GMT.xml"
 )
 
 
