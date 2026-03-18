@@ -6,6 +6,8 @@ import threading
 import warnings
 import os
 import time
+import datetime
+from zoneinfo import ZoneInfo
 from utils import get_logger
 logger = get_logger(__name__)
 
@@ -14,6 +16,7 @@ logger = get_logger(__name__)
 weibull_cache_enabled = os.environ.get('WEIBULL_CACHE_ENABLED', 'true').lower() not in ('false', 'off', '0', 'no')
 
 _weibull_cache = None
+_cache_timestamp = None
 _cache_lock = threading.Lock()
 
 
@@ -160,12 +163,13 @@ def get_csv_data(query='above 3'):
 
 
 def refresh_cache():
-    global _weibull_cache
+    global _weibull_cache, _cache_timestamp
     logger.info('Cache refresh for Weibull data started...')
     try:
         new_data = get_all_data()
         with _cache_lock:
             _weibull_cache = new_data
+            _cache_timestamp = datetime.datetime.now(tz=ZoneInfo('Europe/Zurich'))
         logger.info('Cache refresh for Weibull data completed...')
     except ThresholdError as e:
         logger.error(f'Cache refresh failed due to invalid thresholds: {e}')
@@ -173,6 +177,10 @@ def refresh_cache():
         logger.warning(f'Cache refresh found no data: {e}')
     except Exception as e:
         logger.error(f'Unexpected error during cache refresh: {e}')
+
+
+def get_cache_timestamp():
+    return _cache_timestamp
 
 
 def _get_cached_or_direct_data(part=None):

@@ -2,6 +2,7 @@
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
 from predictr import Analysis
 from data_weibull import get_parts
+from data_weibull import get_cache_timestamp
 from data_weibull import get_failures_and_suspensions
 from reliability.Fitters import Fit_Everything
 from reliability.Fitters import Fit_Weibull_2P
@@ -61,6 +62,16 @@ def plot_settings(fit, upper_quantile=0.999):
 
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
+
+    # Cache timestamp box
+    ts = get_cache_timestamp()
+    if ts is not None:
+        ts_text = f'Data as of: {ts.strftime("%d.%m.%Y %H:%M")}'
+    else:
+        ts_text = 'Data as of: unknown'
+
+    ax.text(0.99, 0.01, ts_text, transform=ax.transAxes, fontsize=8, horizontalalignment='right', verticalalignment='bottom',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray'))
 
     return ax, fig, xmin, xmax_new
 
