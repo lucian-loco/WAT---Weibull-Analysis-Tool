@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import scipy
 import warnings
 import numpy as np
 import autograd
@@ -144,7 +145,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     Parameters
     ----------
     cdf_fn    : callable
-                CDF function with signature f(t, *params) -> array.
+                CDF function with signature f(t, params) -> vector.
                 Must accept log-scale parameters if sampling is done on log-scale.
     params    : ndarray
                 MLE parameter vector on the sampling scale (e.g. log-scale for alpha, beta).
@@ -182,6 +183,8 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
         valid = (samples[:, 4] > 0) & (samples[:, 4] < 1)
         samples = samples[valid]
 
+#ToDo: Maybe include also logit transformation in params for proportion factor p to prevent bad samples
+
     # Filter samples with gamma < min(T_f) since it is not physical correct
     if min_failure is not None:
         valid = samples[:, 2] < min_failure
@@ -193,6 +196,17 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     xvals = np.asarray(xvals)
     curves = np.stack([cdf_fn(xvals, *s) for s in samples], axis=0)
 
+    # Filter curves that are physically invalid
+    valid_curves = (
+            np.all(curves >= 0, axis=1) &  # CDF must be non-negative
+            np.all(curves <= 1, axis=1) &  # CDF must not exceed 1
+            np.all(np.diff(curves, axis=1) >= 0, axis=1)  # CDF must be monotonically increasing
+    )
+    curves = curves[valid_curves]
+
+    if len(curves) == 0:
+        return None, None
+
     if return_sf:
         curves = 1.0 - curves
         alpha_tail = (1.0 - CI) / 2.0
@@ -200,12 +214,18 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
         upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
     else:
         # Calculate the percentiles on the u-scale and transform back afterward
-        u_curves = _u_transform(curves)
+        # u_curves = _u_transform(curves)
+        # alpha_tail = (1.0 - CI) / 2.0
+        # u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
+        # u_upper = np.percentile(u_curves, (1.0 - alpha_tail) * 100.0, axis=0)
+        # lower = _u_inverse(u_lower)
+        # upper = _u_inverse(u_upper)
         alpha_tail = (1.0 - CI) / 2.0
-        u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
-        u_upper = np.percentile(u_curves, (1.0 - alpha_tail) * 100.0, axis=0)
-        lower = _u_inverse(u_lower)
-        upper = _u_inverse(u_upper)
+        lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
+        upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
+
+    lower = np.clip(lower, 1e-9, 1 - 1e-9)
+    upper = np.clip(upper, 1e-9, 1 - 1e-9)
 
     return lower, upper
 
@@ -281,7 +301,7 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
         seed=seed
     )
 
-
+#ToDo: Figure out why the parametric Monte Carlo looks so odd for Competing Risk model
 def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
     """
     Fisher-matrix-based confidence intervals for a Weibull competing risks model.
@@ -474,3 +494,389 @@ def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
         seed=seed,
         min_failure=min(T_f)
     )
+
+#***********************************************************************************************************************
+"""
+Analytical Fisher-matrix-based confidence intervals for Weibull Mixture and Weibull Competing Risks models 
+using the delta method.
+
+How it works:
+    1. Covariance matrix: identical to the Monte Carlo approach – the Hessian of
+       the negative log-likelihood is computed at the MLE via automatic differentiation
+       (autograd), and its inverse yields the Fisher-information-based covariance
+       matrix C = H^-1.
+
+    2. u-scale linearization: the CDF is transformed to the Weibull linearization
+       scale u = ln(-ln(1 - F)), on which the normal approximation underlying the
+       delta method holds more accurately.
+
+    3. Delta method: for each time point t, the variance of u is computed analytically as
+           Var(u) = grad(u)^T * C * grad(u)
+       where grad(u) = du/d(theta) is obtained via autograd.jacobian. This is the
+       exact equivalent of the classical Fisher-matrix formula used in ReliaSoft Weibull++,
+       applied here to multi-parameter models without requiring closed-form derivatives.
+
+    4. Confidence bounds: symmetric bounds are formed on the u-scale as
+           u_U/L = u_hat +/- K_alpha * sqrt(Var(u))
+       and back-transformed to CDF (or SF) space via F = 1 - exp(-exp(u)).
+
+    5. Proportion parameter p (mixture only): bounded separately via a logit
+       transformation to guarantee bounds within [0, 1], consistent with the
+       ReliaSoft approach.
+
+Compared to the parametric Monte Carlo approach above, this method is analytically
+exact (within the asymptotic normal approximation), significantly faster, and
+produces smooth, non-stochastic bounds. Both methods share the same covariance
+matrix and are therefore directly comparable.
+"""
+#-----------------------------------------------------------------------------------------------------------------------
+# Analytical approach to calculate the confidence bounds on reliability / failure probability
+#-----------------------------------------------------------------------------------------------------------------------
+# u-scale functions (Weibull linearization)
+def u_mixture(t, params):
+    """u = ln(-ln(1 - F)) for Weibull Mixture"""
+    log_a1, log_b1, log_a2, log_b2, prop = params[0], params[1], params[2], params[3], params[4]
+    F = (prop * (1 - anp.exp(-(t / anp.exp(log_a1)) ** anp.exp(log_b1)))
+         + (1 - prop) * (1 - anp.exp(-(t / anp.exp(log_a2)) ** anp.exp(log_b2))))
+    F = anp.clip(F, 1e-9, 1 - 1e-9)
+    return anp.log(-anp.log(1.0 - F))
+
+
+def u_cr(t, params):
+    """u = ln(-ln(1 - F)) for Weibull Competing Risks"""
+    log_a1, log_b1, log_a2, log_b2 = params[0], params[1], params[2], params[3]
+    S1 = anp.exp(-(t / anp.exp(log_a1)) ** anp.exp(log_b1))
+    S2 = anp.exp(-(t / anp.exp(log_a2)) ** anp.exp(log_b2))
+    F = 1.0 - S1 * S2
+    F = anp.clip(F, 1e-9, 1 - 1e-9)
+    return anp.log(-anp.log(1.0 - F))
+
+
+# -----------------------------------------------------------------------
+# Jacobians – defined once, evaluated per t in the loop
+# -----------------------------------------------------------------------
+# Mixture:       5 Parameter (log_a1, log_b1, log_a2, log_b2, prop)
+_du_dparams_mixture = autograd.jacobian(u_mixture, argnum=1)
+
+
+# Competing Risks: 4 Parameter (log_a1, log_b1, log_a2, log_b2)
+_du_dparams_cr = autograd.jacobian(u_cr, argnum=1)
+
+
+# -----------------------------------------------------------------------
+# Help function, logit transformation for proportional factor
+# -----------------------------------------------------------------------
+def _logit_bounds_proportion(p_hat, var_p, Z):
+    """CI for proportion p via logit transform, keeps bounds in [0, 1].
+    var_p = C[4,4] directly (p is linear in the param vector).
+
+    Transformation:
+        w = logit(p) = ln(p / (1-p))
+        Var(w) = Var(p) / (p*(1-p))^2     [Delta method on logit]
+        w_U/L = w +/- Z * sqrt(Var(w))
+        p_U/L = sigmoid(w_U/L) = 1 / (1 + exp(-w_U/L))
+    """
+    w_hat = np.log(p_hat / (1.0 - p_hat))
+    var_w = var_p / (p_hat * (1.0 - p_hat)) ** 2
+    w_lower = w_hat - Z * np.sqrt(var_w)
+    w_upper = w_hat + Z * np.sqrt(var_w)
+    p_lower = np.clip(1.0 / (1.0 + np.exp(-w_lower)), 1e-9, 1 - 1e-9)
+    p_upper = np.clip(1.0 / (1.0 + np.exp(-w_upper)), 1e-9, 1 - 1e-9)
+    return p_lower, p_upper
+
+
+def _u_to_F(u):
+    return 1.0 - np.exp(-np.exp(u))
+
+
+def _delta_bounds(u_fn, grad_fn, params, cov, xvals, Z, return_sf):
+    """Core delta-method loop, shared by mixture and CR."""
+    lower, upper = [], []
+    for t in np.asarray(xvals):
+        u_hat = u_fn(t, params)
+        grads = grad_fn(t, params)
+        se_u  = np.sqrt(grads @ cov @ grads)
+        FL = np.clip(_u_to_F(u_hat - Z * se_u), 1e-9, 1 - 1e-9)
+        FU = np.clip(_u_to_F(u_hat + Z * se_u), 1e-9, 1 - 1e-9)
+        if return_sf:
+            lower.append(1.0 - FU)
+            upper.append(1.0 - FL)
+        else:
+            lower.append(FL)
+            upper.append(FU)
+    return np.array(lower), np.array(upper)
+
+
+def _calculate_delta_bounds(fit, xvals, cov, params, CI=0.95, return_sf=False):
+    """
+        Analytical Fisher-matrix CI (delta method) for a Weibull mixture and competing risk model.
+
+        Parameters
+        ----------
+        fit       : Fit_Weibull_Mixture
+        xvals     : array-like
+        cov       : ndarray (5, 5)  – covariance of (log_a1, log_b1, log_a2, log_b2, p)
+                                      from _compute_covariance()
+        CI        : float
+        return_sf : bool
+
+        Returns
+        -------
+        lower, upper        : ndarray  – bounds on CDF (or SF)
+        p_lower, p_upper    : float    – bounds on proportion p
+        """
+    if cov is None:
+        return None, None, None, None
+
+    Z = -scipy.stats.norm.ppf((1.0 - CI) / 2.0)
+
+    if len(params) == 5:
+        lower, upper = _delta_bounds(u_mixture, _du_dparams_mixture, params, cov, xvals, Z, return_sf)
+        p_lower, p_upper = _logit_bounds_proportion(fit.proportion_1, cov[4, 4], Z)
+
+        return lower, upper, p_lower, p_upper
+
+    elif len(params) == 4:
+        lower, upper = _delta_bounds(u_cr, _du_dparams_cr, params, cov, xvals, Z, return_sf)
+
+        return lower, upper, None, None
+
+    else:
+        warnings.warn("The length of params is not 5 or 4. Something went wrong", UserWarning)
+        return None, None, None, None
+
+
+# -----------------------------------------------------------------------
+# Main function: Weibull Mixture
+# -----------------------------------------------------------------------
+def weibull_mixture_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    params = np.array([np.log(fit.alpha_1), np.log(fit.beta_1),
+                       np.log(fit.alpha_2), np.log(fit.beta_2),
+                       fit.proportion_1])
+
+    def neg_loglik(p):
+        p_orig = anp.array([anp.exp(p[0]), anp.exp(p[1]),
+                             anp.exp(p[2]), anp.exp(p[3]), p[4]])
+        return Fit_Weibull_Mixture.LL(p_orig, T_f, T_rc)
+
+    cov = _compute_covariance(neg_loglik, params)
+
+    return _calculate_delta_bounds(fit=fit, xvals=xvals, cov=cov, params=params, CI=CI, return_sf=return_sf)
+
+
+# -----------------------------------------------------------------------
+# Main function: Weibull Competing Risks
+# -----------------------------------------------------------------------
+def weibull_cr_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    params = np.array([np.log(fit.alpha_1), np.log(fit.beta_1),
+                       np.log(fit.alpha_2), np.log(fit.beta_2)])
+
+    def neg_loglik(p):
+        p_orig = anp.array([anp.exp(p[0]), anp.exp(p[1]),
+                             anp.exp(p[2]), anp.exp(p[3])])
+        return Fit_Weibull_CR.LL(p_orig, T_f, T_rc)
+
+    cov = _compute_covariance(neg_loglik, params)
+
+    return _calculate_delta_bounds(fit=fit, xvals=xvals, cov=cov, params=params, CI=CI, return_sf=return_sf)
+
+
+#***********************************************************************************************************************
+#-----------------------------------------------------------------------------------------------------------------------
+# Non-parametric Bootstrap approach to calculate the confidence bounds on reliability / failure probability
+#-----------------------------------------------------------------------------------------------------------------------
+def _bootstrap_bounds(cdf_fn_orig, fit_fn, data_failures, data_suspensions, xvals, CI, n_bootstrap, return_sf, seed, min_failures):
+    """
+    Computes confidence interval bounds via non-parametric bootstrap resampling.
+
+    Resamples units (failures + suspensions) with replacement, refits the model
+    for each bootstrap sample, evaluates the CDF curve over xvals, and returns
+    pointwise CI percentile bounds.
+
+    Each unit retains its original (time, status) pair — the censoring structure
+    is fully preserved. Bootstrap samples with fewer than min_failures failures,
+    non-converging fits, or physically invalid curves are silently discarded.
+
+    Parameters
+    ----------
+    cdf_fn_orig     : callable
+                      CDF function f(xvals, *params) -> array on the original parameter scale.
+    fit_fn          : callable
+                      fit_fn(failures, suspensions) -> params array or None.
+                      Must return None or raise an exception on convergence failure.
+    data_failures   : array-like, original failure times.
+    data_suspensions: array-like, original suspension times (may be empty).
+    xvals           : array-like, time values for evaluation.
+    CI              : float, confidence level (e.g. 0.95).
+    n_bootstrap     : int, number of bootstrap samples.
+    return_sf       : bool, if True return SF bounds instead of CDF.
+    seed            : int, random seed for reproducibility.
+    min_failures    : int, minimum number of failures required per bootstrap sample.
+
+    Returns
+    -------
+    lower, upper : ndarray or (None, None) if fewer than 10 valid samples remain.
+    """
+    rng    = np.random.default_rng(seed=seed)
+    xvals  = np.asarray(xvals)
+
+    # Build unit pool: (time, status) — 1 = failure, 0 = suspension
+    failures_arr    = np.column_stack([data_failures, np.ones(len(data_failures))])
+    suspensions_arr = (np.column_stack([data_suspensions, np.zeros(len(data_suspensions))])
+                       if len(data_suspensions) > 0 else np.empty((0, 2)))
+    all_units = (np.vstack([failures_arr, suspensions_arr])
+                 if len(suspensions_arr) > 0 else failures_arr)
+
+    n_units = len(all_units)
+    curves  = []
+
+    for _ in range(n_bootstrap):
+        idx          = rng.choice(n_units, size=n_units, replace=True)
+        boot_sample  = all_units[idx]
+
+        boot_failures    = boot_sample[boot_sample[:, 1] == 1, 0]
+        boot_suspensions = boot_sample[boot_sample[:, 1] == 0, 0]
+
+        if len(boot_failures) < min_failures:
+            continue
+
+        try:
+            params_b = fit_fn(boot_failures, boot_suspensions if len(boot_suspensions) > 0 else None)
+
+            if params_b is None:
+                continue
+
+            curve = cdf_fn_orig(xvals, *params_b)
+
+            if (np.any(curve < 0) or np.any(curve > 1) or np.any(np.diff(curve) < 0)):
+                continue
+
+            curves.append(curve)
+
+        except Exception:
+            continue
+
+    n_valid = len(curves)
+    print(f'\n{n_valid} fitted samples to calculate the bootstrap confidence interval.')
+    threshold = int(0.75 * n_bootstrap)
+
+    if n_valid < threshold:
+        warnings.warn(f"Bootstrap: only {n_valid}/{n_bootstrap} valid samples ({100 * n_valid / n_bootstrap:.1f}% < 75% threshold). "
+                      f"Confidence bounds may be unreliable — consider a simpler model.", UserWarning)
+
+    if n_valid < 100:
+        warnings.warn(f"Bootstrap: only {n_valid}/{n_bootstrap} valid samples. "
+                      f"Confidence bounds may be unreliable — consider more initial samples.", UserWarning)
+        return None, None
+
+    curves = np.array(curves)
+    alpha_tail = (1.0 - CI) / 2.0
+
+    if return_sf:
+        curves = 1.0 - curves
+
+    lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
+    upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
+
+    lower = np.clip(lower, 1e-9, 1 - 1e-9)
+    upper = np.clip(upper, 1e-9, 1 - 1e-9)
+
+    return lower, upper
+
+
+# -----------------------------------------------------------------------
+# Main function for bootstrapping
+# -----------------------------------------------------------------------
+def weibull_2p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    def fit_fn(f, s):
+        res = Fit_Weibull_2P(failures=f, right_censored=s, show_probability_plot=False, print_results=False,
+                             method='MLE', CI_type='none', optimizer='best')
+
+        if res.optimizer is None:  # If all optimizer fail --> no fit
+            return None
+
+        return np.array([res.alpha, res.beta])
+
+    def cdf_fn(t, alpha, beta):
+
+        return _weibull_cdf(t, alpha, beta)
+
+    return _bootstrap_bounds(cdf_fn_orig=cdf_fn, fit_fn=fit_fn, data_failures=T_f, data_suspensions=T_rc, xvals=xvals,
+                             CI=CI, n_bootstrap=n_bootstrap, return_sf=return_sf, seed=seed, min_failures=2)
+
+
+def weibull_3p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    def fit_fn(f, s):
+        res = Fit_Weibull_3P(failures=f, right_censored=s, show_probability_plot=False, print_results=False,
+                             method='MLE', CI_type='none', optimizer='best')
+
+        if res.optimizer is None:  # If all optimizer fail --> no fit
+            return None
+
+        return np.array([res.alpha, res.beta, res.gamma])
+
+    def cdf_fn(t, alpha, beta, gamma):
+
+        return _weibull_3p_cdf(t, alpha, beta, gamma)
+
+    return _bootstrap_bounds(cdf_fn_orig=cdf_fn, fit_fn=fit_fn, data_failures=T_f, data_suspensions=T_rc, xvals=xvals,
+                             CI=CI, n_bootstrap=n_bootstrap, return_sf=return_sf, seed=seed, min_failures=3)
+
+
+def weibull_mixture_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    def fit_fn(f, s):
+        res = Fit_Weibull_Mixture(failures=f, right_censored=s, show_probability_plot=False, print_results=False,
+                                  method='MLE', CI_type='none', optimizer='best')
+
+        if res.optimizer is None:  # If all optimizer fail --> no fit
+            print(f'Fit was sorted out successfully. "res.optimizer" = {res.optimizer} works totally fine')
+            return None
+
+        return np.array([res.alpha_1, res.beta_1, res.alpha_2, res.beta_2, res.proportion_1])
+
+    def cdf_fn(t, a1, b1, a2, b2, p):
+
+        return _mixture_cdf(t, a1, b1, a2, b2, p)
+
+    return _bootstrap_bounds(cdf_fn_orig=cdf_fn, fit_fn=fit_fn, data_failures=T_f, data_suspensions=T_rc, xvals=xvals,
+                             CI=CI, n_bootstrap=n_bootstrap, return_sf=return_sf, seed=seed, min_failures=5)
+
+
+def weibull_cr_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    def fit_fn(f, s):
+        res = Fit_Weibull_CR(failures=f, right_censored=s, show_probability_plot=False, print_results=False,
+                             method='MLE', CI_type='none', optimizer='best')
+
+        if res.optimizer is None:  # If all optimizer fail --> no fit
+            print(f'Fit was sorted out successfully. "res.optimizer" = {res.optimizer} works totally fine')
+            return None
+
+        return np.array([res.alpha_1, res.beta_1, res.alpha_2, res.beta_2])
+
+    def cdf_fn(t, a1, b1, a2, b2):
+
+        return _cr_cdf(t, a1, b1, a2, b2)
+
+    return _bootstrap_bounds(cdf_fn_orig=cdf_fn, fit_fn=fit_fn, data_failures=T_f, data_suspensions=T_rc, xvals=xvals,
+                             CI=CI, n_bootstrap=n_bootstrap, return_sf=return_sf, seed=seed, min_failures=4)
+
+
+
