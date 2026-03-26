@@ -76,7 +76,7 @@ def get_crate_dims(equipment_code):
 def crate_name_to_crate_id(crate_name, version='TODAY'):
     """ Returns the ID of a crate with a given name. """
     cursor = db_hitdata.get_cursor()
-    query = "SELECT CRATE_ID FROM CRATE_POSITIONS_DAYS_V " \
+    query = "SELECT DISTINCT(CRATE_ID) FROM MODULE_POSITIONS_DAYS_V " \
             "WHERE CRATE_NAME = :crate_name " \
             "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
             "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version)"
@@ -91,7 +91,7 @@ def crate_name_to_crate_id(crate_name, version='TODAY'):
 def crate_id_to_crate_name(crate_id, version='TODAY'):
     """ Returns the name of a crate with a given ID. """
     cursor = db_hitdata.get_cursor()
-    query = "SELECT CRATE_NAME FROM CRATE_POSITIONS_DAYS_V " \
+    query = "SELECT DISTINCT(CRATE_NAME) FROM MODULE_POSITIONS_DAYS_V " \
             "WHERE CRATE_ID = :crate_id " \
             "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
             "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version)"
@@ -106,22 +106,41 @@ def crate_id_to_crate_name(crate_id, version='TODAY'):
 def get_crate_data(crate_id, version='TODAY'):
     """ Returns the ID of a crate with a given name. """
     cursor = db_hitdata.get_cursor()
+
     query = "SELECT RACK_NAME, RACK_EXPERT_NAME, RACK_DESCRIPTION, CRATE_NAME, FEC_NAME, CRATE_EQUIPMENT_CODE FROM CRATE_POSITIONS_DAYS_V " \
             "WHERE CRATE_ID = :crate_id " \
             "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
             "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version)"
     response = cursor.execute(query, (crate_id, version, version)).fetchall()
 
+    if len(response) == 1:
+        return {
+            'rack_name': response[0][0],
+            'rack_expert_name': response[0][1],
+            'rack_description': response[0][2],
+            'crate_name': response[0][3],
+            'fec_name': response[0][4],
+            'crate_equipment_code': response[0][5]
+        }
+
+    # For crates which are not in a rack, we need to get limited data from another view
+    query = "SELECT CRATE_NAME, FEC_NAME, CRATE_EQUIPMENT_CODE FROM MODULE_POSITIONS_DAYS_V " \
+            "WHERE CRATE_ID = :crate_id " \
+            "AND VALID_FROM_DAY <= (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
+            "AND EXPIRY_DAY > (SELECT MILESTONE_DAY FROM LAYOUT_MILESTONE_DAYS WHERE LABEL = :version) " \
+            "GROUP BY CRATE_NAME, FEC_NAME, CRATE_EQUIPMENT_CODE"
+    response = cursor.execute(query, (crate_id, version, version)).fetchall()
+
     if len(response) != 1:
         raise ValueError(f'Invalid crate ID: {crate_id}')
 
     return {
-        'rack_name': response[0][0],
-        'rack_expert_name': response[0][1],
-        'rack_description': response[0][2],
-        'crate_name': response[0][3],
-        'fec_name': response[0][4],
-        'crate_equipment_code': response[0][5]
+        'rack_name': None,
+        'rack_expert_name': None,
+        'rack_description': None,
+        'crate_name': response[0][0],
+        'fec_name': response[0][1],
+        'crate_equipment_code': response[0][2]
     }
 
 

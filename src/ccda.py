@@ -82,7 +82,7 @@ class Query:
 
 def crate_by_label(label):
     """ Finds a specific crate in CCDB (using 'label' field). """
-    response = requests.get(f'{CCDA_API_URL}/beta/crates/do/search?query=label%3D%3D{label}', verify=False)
+    response = requests.get(f'{CCDA_API_URL}/crates/do/search?query=label%3D%3D{label}', verify=False)
     data = json.loads(response.text)
 
     if data['totalElements'] == 0:
@@ -96,7 +96,7 @@ def crate_by_label(label):
 
 def crate_type_by_name(name):
     """ Finds a specific crate type in CCDB (using 'name' field). """
-    response = requests.get(f'{CCDA_API_URL}/beta/crate-types/by/name/{name}', verify=False)
+    response = requests.get(f'{CCDA_API_URL}/crate-types/by/name/{name}', verify=False)
     return json.loads(response.text)
 
 
