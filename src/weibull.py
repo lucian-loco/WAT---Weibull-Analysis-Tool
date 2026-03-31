@@ -208,7 +208,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
 
     return wb.results
 
-# ToDo: Compare upper/lower p for own and library implementation
+
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
@@ -300,23 +300,23 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
                 label=f'{int(ci * 100)}% analytical Fisher CI'
             )
         # --------------------------------------------------------------------------------------------------------------
-        print(f'Starting with the bootstrapping...')
-        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
-        lower_bootstrap, upper_bootstrap = weibull_mixture_bootstrap_bounds(xvals=xvals, failures=data['failures'],
-                                                                           right_censored=data['suspensions'], CI=ci)
-
-        if lower_bootstrap is not None and upper_bootstrap is not None:
-            ax.fill_between(
-                xvals,
-                lower_bootstrap,
-                upper_bootstrap,
-                alpha=0.3,
-                facecolor='none',
-                edgecolor='fuchsia',
-                label=f'{int(ci * 100)}% Bootstrapping CI',
-                hatch='oo'
-            )
-        # --------------------------------------------------------------------------------------------------------------
+        # print(f'Starting with the bootstrapping...')
+        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # lower_bootstrap, upper_bootstrap = weibull_mixture_bootstrap_bounds(xvals=xvals, failures=data['failures'],
+        #                                                                    right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_bootstrap is not None and upper_bootstrap is not None:
+        #     ax.fill_between(
+        #         xvals,
+        #         lower_bootstrap,
+        #         upper_bootstrap,
+        #         alpha=0.3,
+        #         facecolor='none',
+        #         edgecolor='fuchsia',
+        #         label=f'{int(ci * 100)}% Bootstrapping CI',
+        #         hatch='oo'
+        #     )
+        # # --------------------------------------------------------------------------------------------------------------
 
     plt.legend(loc='upper left')
 
@@ -421,23 +421,23 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
                 label=f'{int(ci * 100)}% analytical Fisher CI'
             )
         # --------------------------------------------------------------------------------------------------------------
-        print(f'Starting with the bootstrapping...')
-        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
-        lower_bootstrap, upper_bootstrap = weibull_cr_bootstrap_bounds(xvals=xvals, failures=data['failures'],
-                                                                            right_censored=data['suspensions'], CI=ci)
-
-        if lower_bootstrap is not None and upper_bootstrap is not None:
-            ax.fill_between(
-                xvals,
-                lower_bootstrap,
-                upper_bootstrap,
-                alpha=0.3,
-                facecolor='none',
-                edgecolor='fuchsia',
-                label=f'{int(ci * 100)}% Bootstrapping CI',
-                hatch='oo'
-            )
-        # --------------------------------------------------------------------------------------------------------------
+        # print(f'Starting with the bootstrapping...')
+        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # lower_bootstrap, upper_bootstrap = weibull_cr_bootstrap_bounds(xvals=xvals, failures=data['failures'],
+        #                                                                     right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_bootstrap is not None and upper_bootstrap is not None:
+        #     ax.fill_between(
+        #         xvals,
+        #         lower_bootstrap,
+        #         upper_bootstrap,
+        #         alpha=0.3,
+        #         facecolor='none',
+        #         edgecolor='fuchsia',
+        #         label=f'{int(ci * 100)}% Bootstrapping CI',
+        #         hatch='oo'
+        #     )
+        # # --------------------------------------------------------------------------------------------------------------
 
     plt.legend(loc='upper left')
 
@@ -738,7 +738,7 @@ def generate_graph(part):
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
 
-    weibull_mixture(part='HCCVFEB')
+    manual_weibull(part='HCCFISA')
     # weibull_cr(part='HCCVSEA')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
