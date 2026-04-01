@@ -229,7 +229,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
 
     return lower, upper
 
-
+# ToDo: Think of Logit transformation for the params
 #-----------------------------------------------------------------------------------------------------------------------
 # Main functions
 #-----------------------------------------------------------------------------------------------------------------------
@@ -571,7 +571,7 @@ def _logit_bounds_proportion(p_hat, var_p, Z):
     var_p = C[4,4] directly (p is linear in the param vector).
 
     Transformation:
-        w = logit(p) = ln(p / (1-p))
+        w = logit(p) = log(p / (1-p))
         Var(w) = Var(p) / (p*(1-p))^2     [Delta method on logit]
         w_U/L = w +/- Z * sqrt(Var(w))
         p_U/L = sigmoid(w_U/L) = 1 / (1 + exp(-w_U/L))
