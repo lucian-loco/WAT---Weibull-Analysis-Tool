@@ -12,16 +12,19 @@ from utils import get_logger
 logger = get_logger(__name__)
 
 
+# os.environ['WEIBULL_CACHE_ENABLED'] = 'false'
 
 weibull_cache_enabled = os.environ.get('WEIBULL_CACHE_ENABLED', 'true').lower() not in ('false', 'off', '0', 'no')
 
 _weibull_cache = None
 _cache_timestamp = None
 _cache_lock = threading.Lock()
+# Variable to set for the data that will be used in the automated Weibull analysis.
+failure_threshold_global = 4
 
 
 
-def get_all_data(failure_threshold=4, distinct_threshold=2):
+def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
         raise ThresholdError(f'Invalid failure threshold "{failure_threshold}", needs to be an integer and greater than or equal as 1')
@@ -203,7 +206,7 @@ def _get_cached_or_direct_data(part=None):
             return get_all_data()
 
 
-def get_failures_and_suspensions(part=None):
+def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_global):
     # This exception is needed since the return of data_weibull.get_parts() is already formatted correctly
     if not weibull_cache_enabled and part is not None:
         return _get_cached_or_direct_data(part=part)
@@ -212,7 +215,8 @@ def get_failures_and_suspensions(part=None):
 
     if part is not None:
         if part not in data:
-            raise DataError(f'Part {part} not found in data.')
+            raise DataError(f'Part {part} not found in data. Probably there were too few failures. '
+                            f'Data contains only parts with more than {failure_threshold} failures.')
 
         part_df = data[part]
         return {'failures': part_df[part_df['STATUS'] == 'F']['RUNNING_TIME'].tolist(),
