@@ -617,7 +617,15 @@ def _delta_bounds(u_fn, grad_fn, params, cov, xvals, Z, return_sf):
     for t in np.asarray(xvals):
         u_hat = u_fn(t, params)
         grads = grad_fn(t, params)
-        se_u  = np.sqrt(grads @ cov @ grads)
+        var_u = grads @ cov @ grads
+
+        if var_u < 0.0:
+            warnings.warn(f'Negative variance encountered in delta method at t={t:.4g}: var_u = {var_u:.3e}. '
+                          f'The covariance matrix may be invalid. No confidence bounds are returned.', UserWarning)
+
+            return None, None
+
+        se_u  = np.sqrt(var_u)
         FL = np.clip(_u_to_F(u_hat - Z * se_u), 1e-9, 1 - 1e-9)
         FU = np.clip(_u_to_F(u_hat + Z * se_u), 1e-9, 1 - 1e-9)
         if return_sf:
