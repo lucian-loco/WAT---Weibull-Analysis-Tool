@@ -70,7 +70,7 @@ def _cr_cdf(t, a1, b1, a2, b2):
 
 
 def _u_transform(F):
-    """Transforms CDF values to the Weibull linearization scale (u-scale)"""
+    """Transforms CDF values to the Weibull linearization scale (u-scale) in log scale"""
     F = np.clip(F, 1e-9, 1 - 1e-9)
     return np.log(-np.log(1.0 - F))
 
@@ -194,6 +194,7 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
 #ToDo: Maybe include also logit transformation in params for proportion factor p to prevent bad samples
 
     # Filter samples with gamma < min(T_f) since it is not physical correct
+    # Only applies to Weibull 3P
     if min_failure is not None:
         valid = samples[:, 2] < min_failure
         samples = samples[valid]
@@ -542,6 +543,15 @@ matrix and are therefore directly comparable.
 # Analytical approach to calculate the confidence bounds on reliability / failure probability
 #-----------------------------------------------------------------------------------------------------------------------
 # u-scale functions (Weibull linearization)
+# Also used for Weibull 3P just with shifted t
+def u_2p(t, params):
+    """u = ln(-ln(1 - F)) for Weibull 2P"""
+    log_alpha, log_beta = params[0], params[1]
+    F = 1 - anp.exp(-(t / anp.exp(log_alpha)) ** anp.exp(log_beta))
+    F = anp.clip(F, 1e-9, 1 - 1e-9)
+    return anp.log(-anp.log(1.0 - F))
+
+
 def u_mixture(t, params):
     """u = ln(-ln(1 - F)) for Weibull Mixture"""
     log_a1, log_b1, log_a2, log_b2, prop = params[0], params[1], params[2], params[3], params[4]
@@ -564,9 +574,11 @@ def u_cr(t, params):
 # -----------------------------------------------------------------------
 # Jacobians – defined once, evaluated per t in the loop
 # -----------------------------------------------------------------------
+# Weibull 2P / 3P
+_du_dparams_2p = autograd.jacobian(u_2p, argnum=1)
+
 # Mixture:       5 Parameter (log_a1, log_b1, log_a2, log_b2, prop)
 _du_dparams_mixture = autograd.jacobian(u_mixture, argnum=1)
-
 
 # Competing Risks: 4 Parameter (log_a1, log_b1, log_a2, log_b2)
 _du_dparams_cr = autograd.jacobian(u_cr, argnum=1)
@@ -619,22 +631,28 @@ def _delta_bounds(u_fn, grad_fn, params, cov, xvals, Z, return_sf):
 
 def _calculate_delta_bounds(fit, xvals, cov, params, CI=0.95, return_sf=False):
     """
-        Analytical Fisher-matrix CI (delta method) for a Weibull mixture and competing risk model.
+    Analytical Fisher-matrix CI (delta method) for Weibull 2P, 3P, Mixture and CR.
 
-        Parameters
-        ----------
-        fit       : Fit_Weibull_Mixture
-        xvals     : array-like
-        cov       : ndarray (5, 5)  – covariance of (log_a1, log_b1, log_a2, log_b2, p)
-                                      from _compute_covariance()
-        CI        : float
-        return_sf : bool
+    Parameters
+    ----------
+    fit       : fitted model object
+    xvals     : array-like
+                For Weibull 3P: pass already gamma-shifted values (t - gamma_hat).
+                For all others: pass original time values.
+    cov       : ndarray – covariance matrix from _compute_covariance()
+                For Weibull 3P: pass cov_2p (2x2) only.
+    params    : ndarray
+                For Weibull 2P / 3P : [log_alpha, log_beta]
+                For Competing Risks  : [log_a1, log_b1, log_a2, log_b2]
+                For Mixture          : [log_a1, log_b1, log_a2, log_b2, p]
+    CI        : float
+    return_sf : bool
 
-        Returns
-        -------
-        lower, upper        : ndarray  – bounds on CDF (or SF)
-        p_lower, p_upper    : float    – bounds on proportion p
-        """
+    Returns
+    -------
+    lower, upper        : ndarray  – bounds on CDF (or SF)
+    p_lower, p_upper    : float or None – bounds on proportion p (Mixture only)
+    """
     if cov is None:
         return None, None, None, None
 
@@ -651,14 +669,121 @@ def _calculate_delta_bounds(fit, xvals, cov, params, CI=0.95, return_sf=False):
 
         return lower, upper, None, None
 
+    elif len(params) == 2:
+        lower, upper = _delta_bounds(u_2p, _du_dparams_2p, params, cov, xvals, Z, return_sf)
+
+        return lower, upper, None, None
+
     else:
-        warnings.warn("The length of params is not 5 or 4. Something went wrong", UserWarning)
+        warnings.warn(f"Unexpected parameter vector length: {len(params)}. Expected 2, 4, or 5.", UserWarning)
         return None, None, None, None
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 # Main functions for analytical Delta method: Mixture and Competing Risks
 #-----------------------------------------------------------------------------------------------------------------------
+def weibull_2p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    T_f  = np.asarray(failures)
+    T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
+
+    params = np.array([np.log(fit.alpha), np.log(fit.beta)])
+
+    def neg_loglik(p):
+        return Fit_Weibull_2P.LL(anp.exp(p), T_f, T_rc)
+
+    cov = _compute_covariance(neg_loglik, params)
+
+    return _calculate_delta_bounds(fit=fit, xvals=xvals, cov=cov, params=params, CI=CI, return_sf=return_sf)
+
+
+def weibull_3p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    """
+    Analytical Fisher-matrix CI (delta method) for a Weibull 3P model.
+
+    Algorithm is consistent with the reliability library and ReliaSoft Weibull++:
+
+    1. Covariance matrix (hybrid strategy):
+       - Var(alpha), Var(beta), Cov(alpha,beta): from Weibull_2P LL on
+         gamma-shifted data (T_f - gamma_hat). Stable Fisher information.
+       - Var(gamma): from full Weibull_3P LL (convergence check only,
+         not used in Var(u) calculation).
+       - Cross-covariances between (alpha, beta) and gamma: set to 0.
+
+    2. u-scale: gamma is treated as a fixed shift. xvals are expected to be
+       already gamma-shifted (t - gamma_hat), as returned by ax.get_xlim()
+       from a reliability Weibull 3P probability plot. Therefore du/dgamma = 0
+       and gamma does NOT contribute to Var(u). Identical to the reliability
+       library implementation.
+
+    3. Var(u) = grad(u)^T * C_2P * grad(u)  using the 2x2 covariance only.
+
+    4. Bounds: u_U/L = u_hat +/- Z * sqrt(Var(u)), back-transformed via
+       F = 1 - exp(-exp(u)).
+
+    Parameters
+    ----------
+    fit           : Fit_Weibull_3P
+    xvals         : array-like
+                    Gamma-shifted time values (t - gamma_hat), as returned by
+                    ax.get_xlim() from a reliability Weibull 3P probability plot.
+                    Values <= 0 are automatically excluded.
+    failures      : list or array, failure times (original scale).
+    right_censored: list or array, optional, suspension times (original scale).
+    CI            : float, default 0.95
+    return_sf     : bool, default False
+
+    Returns
+    -------
+    lower  : ndarray or None
+    upper  : ndarray or None
+    None   : placeholder (no proportion parameter for 3P)
+    None   : placeholder
+    """
+    T_f   = np.asarray(failures)
+    T_rc  = np.asarray(right_censored) if right_censored is not None else np.array([])
+    gamma_hat = fit.gamma
+
+    # ----------------------------------------------------------------
+    # Step 1a: 2×2 covariance for (log_alpha, log_beta)
+    #          via Weibull_2P LL on gamma-shifted data
+    # ----------------------------------------------------------------
+    T_f_shifted  = T_f  - gamma_hat
+    T_rc_shifted = T_rc - gamma_hat if len(T_rc) > 0 else np.array([])
+
+    params_2p = np.array([np.log(fit.alpha), np.log(fit.beta)])
+
+    def neg_loglik_2p(p):
+        return Fit_Weibull_2P.LL(anp.exp(p), T_f_shifted, T_rc_shifted)
+
+    cov_2p = _compute_covariance(neg_loglik_2p, params_2p)
+
+    if cov_2p is None:
+        warnings.warn("Weibull 3P analytical bounds: 2P covariance (alpha, beta) could not be computed.", UserWarning)
+        return None, None, None, None
+
+    # ----------------------------------------------------------------
+    # Step 1b: Var(gamma) from full Weibull_3P LL (diagonal entry only)
+    # ----------------------------------------------------------------
+    params_3p_full = np.array([np.log(fit.alpha), np.log(fit.beta), fit.gamma])
+
+    def neg_loglik_3p(p):
+        return Fit_Weibull_3P.LL(anp.array([anp.exp(p[0]), anp.exp(p[1]), p[2]]), T_f, T_rc)
+
+    cov_3p_full = _compute_covariance(neg_loglik_3p, params_3p_full)
+
+    if cov_3p_full is None:
+        warnings.warn("Weibull 3P analytical bounds: 3P covariance (gamma) could not be computed.", UserWarning)
+        return None, None, None, None
+
+    # ----------------------------------------------------------------
+    # Step 2: Delegate to _calculate_delta_bounds.
+    #         xvals are already gamma-shifted (from ax.get_xlim()).
+    #         Exclude any values <= 0 (correspond to t <= gamma).
+    # ----------------------------------------------------------------
+
+    return _calculate_delta_bounds(fit=fit, xvals=xvals, cov=cov_2p, params=params_2p, CI=CI, return_sf=return_sf)
+
+
 def weibull_mixture_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
