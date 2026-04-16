@@ -810,7 +810,7 @@ def _bootstrap_bounds(cdf_fn_orig, fit_fn, data_failures, data_suspensions, xval
         warnings.warn(f"Bootstrap: only {n_valid}/{n_bootstrap} valid samples ({100 * n_valid / n_bootstrap:.1f}% < 75% threshold). "
                       f"Confidence bounds may be unreliable — consider a simpler model.", UserWarning)
 
-    if n_valid < 100:
+    if n_valid < 500:
         warnings.warn(f"Bootstrap: only {n_valid}/{n_bootstrap} valid samples. "
                       f"Confidence bounds may be unreliable — consider more initial samples.", UserWarning)
         return None, None
