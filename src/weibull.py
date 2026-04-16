@@ -122,7 +122,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -176,7 +176,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -238,7 +238,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -359,7 +359,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -738,10 +738,20 @@ def generate_graph(part):
 #***********************************************************************************************************************
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
+    from Synthetic_Data import load_datasets_from_csv
+
+    data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_Mix_a1000_b0_5_n1000_cr0_1_a215000_b20_5_p0_2.csv', seed=2)
+
+    # print(f'Der Datensatz sieht wie folgt aus: {data_csv[0]}')
+
+    weibull_mixture(part='Synthetic data', data=data_csv[0])
+
+
+
 
     # manual_weibull(part='HCCVSWB')
     # weibull_cr(part='HCCVSEA')
-    weibull_mixture(part='HCCVSWB')
+    # weibull_mixture(part='HCCVSWB')
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #
