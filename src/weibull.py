@@ -116,13 +116,13 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if len(data['suspensions']) == 0:
+    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -170,13 +170,13 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if len(data['suspensions']) == 0:
+    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -232,13 +232,13 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if len(data['suspensions']) == 0:
+    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -353,13 +353,13 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if len(data['suspensions']) == 0:
+    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -473,13 +473,13 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
         raise ThresholdError('Not enough failures (more than 2) to perform Weibull in data for "{0}"'.format(part))
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     # Weibull Analysis
