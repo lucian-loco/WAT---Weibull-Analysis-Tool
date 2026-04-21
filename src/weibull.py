@@ -112,7 +112,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
@@ -166,7 +166,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
@@ -221,7 +221,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     if failure_size < 4:
@@ -342,7 +342,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     if failure_size < 4:
