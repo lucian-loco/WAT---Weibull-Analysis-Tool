@@ -168,8 +168,8 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
                 Number of Monte Carlo samples.
     return_sf : bool
                 If True, returns bounds for the survival function (SF = 1 - CDF)
-                instead of the CDF. SF bounds are computed directly via percentiles
-                without u-transformation.
+                instead of the CDF. SF bounds are derived from CDF bounds via SF = 1 - CDF, with bounds
+                correctly swapped: SF_lower = 1 - CDF_upper, SF_upper = 1 - CDF_lower.
     seed      : int
                 Random seed for reproducibility.
 
@@ -216,22 +216,22 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
     if len(curves) == 0:
         return None, None
 
+    # Calculate the percentiles on the u-scale and transform back afterward
+    u_curves = _u_transform(curves)
+    alpha_tail = (1.0 - CI) / 2.0
+    u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
+    u_upper = np.percentile(u_curves, (1.0 - alpha_tail) * 100.0, axis=0)
+    lower = _u_inverse(u_lower)
+    upper = _u_inverse(u_upper)
+    # alpha_tail = (1.0 - CI) / 2.0
+    # lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
+    # upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
+
     if return_sf:
-        curves = 1.0 - curves
-        alpha_tail = (1.0 - CI) / 2.0
-        lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
-        upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
-    else:
-        # Calculate the percentiles on the u-scale and transform back afterward
-        # u_curves = _u_transform(curves)
-        # alpha_tail = (1.0 - CI) / 2.0
-        # u_lower = np.percentile(u_curves, alpha_tail * 100.0, axis=0)
-        # u_upper = np.percentile(u_curves, (1.0 - alpha_tail) * 100.0, axis=0)
-        # lower = _u_inverse(u_lower)
-        # upper = _u_inverse(u_upper)
-        alpha_tail = (1.0 - CI) / 2.0
-        lower = np.percentile(curves, alpha_tail * 100.0, axis=0)
-        upper = np.percentile(curves, (1.0 - alpha_tail) * 100.0, axis=0)
+        lower_sf = 1 - upper
+        upper_sf = 1 - lower
+
+        return np.clip(lower_sf, 1e-9, 1 - 1e-9), np.clip(upper_sf, 1e-9, 1 - 1e-9)
 
     lower = np.clip(lower, 1e-9, 1 - 1e-9)
     upper = np.clip(upper, 1e-9, 1 - 1e-9)
