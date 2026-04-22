@@ -252,7 +252,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     try:
         wb = Fit_Weibull_Mixture(failures=data['failures'], right_censored=data['suspensions'],
                                 show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
-                                optimizer='best',                                  # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
+                                optimizer='best',                                   # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
                                 CI=ci,
                                 label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:

@@ -782,7 +782,6 @@ def weibull_3p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0
 
     if cov_3p_full is None:
         warnings.warn("Weibull 3P analytical bounds: 3P covariance (gamma) could not be computed.", UserWarning)
-        return None, None, None, None
 
     # ----------------------------------------------------------------
     # Step 2: Delegate to _calculate_delta_bounds.
