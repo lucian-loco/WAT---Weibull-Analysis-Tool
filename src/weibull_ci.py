@@ -704,6 +704,7 @@ def weibull_2p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0
     return _calculate_delta_bounds(fit=fit, xvals=xvals, cov=cov, params=params, CI=CI, return_sf=return_sf)
 
 
+# ToDo: Make this function without xvals already shifted but then use _calcualte_xvals() instead of ax.get_xlim() method
 def weibull_3p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
     """
     Analytical Fisher-matrix CI (delta method) for a Weibull 3P model.
