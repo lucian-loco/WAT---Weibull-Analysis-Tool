@@ -122,7 +122,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -141,6 +141,12 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
                             label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
+
+    from reliability.Distributions import Weibull_Distribution
+    from Validate_Weibull_CI import _calculate_xvals
+    _, _, xvals = _calculate_xvals(data['failures'])
+    reliasoft_distribution = Weibull_Distribution(alpha=2498.690027, beta=1.484547)
+    yvals = reliasoft_distribution.CDF(xvals=xvals, show_plot=True, label=f'MLE fit reliasoft GUI')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
     ax, fig,_ ,_ = plot_settings(wb)
@@ -176,7 +182,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
@@ -238,7 +244,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -359,7 +365,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -479,7 +485,7 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if data.get('suspensions') is not None or len(data['suspensions']) == 0:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     # Weibull Analysis
@@ -740,11 +746,11 @@ if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
     from Synthetic_Data import load_datasets_from_csv
 
-    data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_Mix_a1000_b0_5_n1000_cr0_1_a215000_b20_5_p0_2.csv', seed=2)
+    data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_2P_a2500_b1_5_n1000_cr0_2.csv', seed=1)
 
     # print(f'Der Datensatz sieht wie folgt aus: {data_csv[0]}')
 
-    weibull_mixture(part='Synthetic data', data=data_csv[0])
+    weibull_2p(part='Synthetic data', data=data_csv[0])
 
 
 
