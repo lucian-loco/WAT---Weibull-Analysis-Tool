@@ -17,8 +17,8 @@ from weibull_ci import weibull_mixture_fisher_bounds
 from weibull_ci import weibull_mixture_bootstrap_bounds
 from weibull_ci import weibull_mixture_analytical_bounds
 #from reliability.Other_functions import distribution_explorer
-#from reliability.Other_functions import make_right_censored_data
 import io
+import os
 import warnings
 import numpy as np
 import pandas as pd
@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import LogLocator, FuncFormatter
 from utils import get_logger
 logger = get_logger(__name__)
+# ToDo: Every Confidence Bound with analytical algorithm for consistency
 
 
 # ToDo: Include "if res.optimizer is None:" to check whether the fit was successful
@@ -141,12 +142,6 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
                             label=f'Weibull 2 Parameter fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
-
-    from reliability.Distributions import Weibull_Distribution
-    from Validate_Weibull_CI import _calculate_xvals
-    _, _, xvals = _calculate_xvals(data['failures'])
-    reliasoft_distribution = Weibull_Distribution(alpha=2498.690027, beta=1.484547)
-    yvals = reliasoft_distribution.CDF(xvals=xvals, show_plot=True, label=f'MLE fit reliasoft GUI')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
     ax, fig,_ ,_ = plot_settings(wb)
@@ -277,21 +272,21 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+
     if ci_mc != 0.0:
         # Calculation of the Confidence Interval:-----------------------------------------------------------------------
-        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
-
-        lower_mc, upper_mc = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                     right_censored=data['suspensions'], CI=ci)
-
-        if lower_mc is not None and upper_mc is not None:
-            ax.fill_between(
-                xvals,
-                lower_mc,
-                upper_mc,
-                alpha=0.3,
-                label=f'{int(ci * 100)}% numerical Fisher CI'
-            )
+        # lower_mc, upper_mc = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+        #                                              right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_mc is not None and upper_mc is not None:
+        #     ax.fill_between(
+        #         xvals,
+        #         lower_mc,
+        #         upper_mc,
+        #         alpha=0.3,
+        #         label=f'{int(ci * 100)}% numerical Fisher CI'
+        #     )
         # --------------------------------------------------------------------------------------------------------------
 
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
@@ -304,11 +299,11 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
                 lower_analytic,
                 upper_analytic,
                 alpha=0.3,
-                label=f'{int(ci * 100)}% analytical Fisher CI'
+                label=f'{int(ci * 100)}% analytical CI'
             )
         # --------------------------------------------------------------------------------------------------------------
         # print(f'Starting with the bootstrapping...')
-        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
         # lower_bootstrap, upper_bootstrap = weibull_mixture_bootstrap_bounds(xvals=xvals, failures=data['failures'],
         #                                                                    right_censored=data['suspensions'], CI=ci)
         #
@@ -323,7 +318,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
         #         label=f'{int(ci * 100)}% Bootstrapping CI',
         #         hatch='oo'
         #     )
-        # # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
 
     plt.legend(loc='upper left')
 
@@ -398,21 +393,21 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+
     if ci_mc != 0.0:
         # Calculation of the Confidence Interval:-----------------------------------------------------------------------
-        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
-
-        lower_mc, upper_mc = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                      right_censored=data['suspensions'], CI=ci)
-
-        if lower_mc is not None and upper_mc is not None:
-            ax.fill_between(
-                xvals,
-                lower_mc,
-                upper_mc,
-                alpha=0.3,
-                label=f'{int(ci * 100)}% numerical Fisher CI'
-            )
+        # lower_mc, upper_mc = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+        #                                               right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_mc is not None and upper_mc is not None:
+        #     ax.fill_between(
+        #         xvals,
+        #         lower_mc,
+        #         upper_mc,
+        #         alpha=0.3,
+        #         label=f'{int(ci * 100)}% numerical Fisher CI'
+        #     )
         # --------------------------------------------------------------------------------------------------------------
 
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
@@ -425,11 +420,11 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
                 lower_analytical,
                 upper_analytical,
                 alpha=0.3,
-                label=f'{int(ci * 100)}% analytical Fisher CI'
+                label=f'{int(ci * 100)}% analytical CI'
             )
         # --------------------------------------------------------------------------------------------------------------
         # print(f'Starting with the bootstrapping...')
-        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
         # lower_bootstrap, upper_bootstrap = weibull_cr_bootstrap_bounds(xvals=xvals, failures=data['failures'],
         #                                                                     right_censored=data['suspensions'], CI=ci)
         #
@@ -444,7 +439,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
         #         label=f'{int(ci * 100)}% Bootstrapping CI',
         #         hatch='oo'
         #     )
-        # # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
 
     plt.legend(loc='upper left')
 
@@ -458,6 +453,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     return wb.results
 
 
+# ToDo: AICc and BIC with delta
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
@@ -563,6 +559,7 @@ def validate_ci(value_str: str, default: float = 0.95):
         return None, "Invalid input, please enter a number (e.g. 0.95)."
 
 
+# ToDo: Outsource this function to weibull_evaluation.py
 def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
     """
     Determines the best distribution by comparing AICc and BIC winners.
@@ -581,8 +578,8 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
         print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
         return resolved
 
-# ToDo: In case a Weibull Mixture is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
-def automated_weibull():
+# ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
+def automated_weibull(save_path=None):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='BIC')
@@ -592,7 +589,7 @@ def automated_weibull():
 
     part_names_hit = get_parts(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
-    print(f"\n→ Starting analysis for these parts...")
+    print(f"\n→ Starting analysis for {len(part_names_hit)} parts...")
 
     parts_data_fit_all = []
     parts_best_distribution_names = []
@@ -614,10 +611,10 @@ def automated_weibull():
 
     parts_best_distribution_names = pd.concat(parts_best_distribution_names, ignore_index=True)
 
-    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=None),
-                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=None),
-                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=None),
-                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=None)}
+    fitter_map = {'Weibull_2P':         lambda p, sp: weibull_2p(part=p, ci=ci, save_path=sp),
+                  'Weibull_3P':         lambda p, sp: weibull_3p(part=p, ci=ci, save_path=sp),
+                  'Weibull_Mixture':    lambda p, sp: weibull_mixture(part=p, ci=ci, save_path=sp),
+                  'Weibull_CR':         lambda p, sp: weibull_cr(part=p, ci=ci, save_path=sp)}
 
     parts_fit_results = {}
 
@@ -635,7 +632,9 @@ def automated_weibull():
                 warnings.warn(f'Unknown distribution "{best_distribution}" for "{part}" --> skipped.', RuntimeWarning)
             continue
 
-        parts_fit_results[part] = fit_function(part)
+        part_save_path = os.path.join(save_path, f'{sort_by}_plot_{part}.png')
+
+        parts_fit_results[part] = fit_function(part, part_save_path)
 
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(f"\nThis are the results of the automated Weibull analysis:")
@@ -685,6 +684,7 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HIT Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
+# ToDo: One function to generate the Weibull plot and one function to generate the Reliability curve.
 def generate_graph_new(part, sort_by='BIC', ci=0.95):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
@@ -746,13 +746,15 @@ if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
     from Synthetic_Data import load_datasets_from_csv
 
-    data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_2P_a2500_b1_5_n1000_cr0_2.csv', seed=1)
+    # data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_3P_a15000_b1_5_n50_cr0_2_g100.csv', seed=3)
 
     # print(f'Der Datensatz sieht wie folgt aus: {data_csv[0]}')
 
-    weibull_2p(part='Synthetic data', data=data_csv[0])
+    # weibull_3p(part='Synthetic data', data=data_csv[0])
 
+    # weibull_2p(part='HCCTRP', ci=0.95)
 
+    parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_AICc')
 
     # manual_weibull(part='HCCVSWB')
     # weibull_cr(part='HCCVSEA')
