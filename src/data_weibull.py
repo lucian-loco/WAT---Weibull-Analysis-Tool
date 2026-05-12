@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 # os.environ['WEIBULL_CACHE_ENABLED'] = 'false'
 
+# The env variable WEIBULL_CACHE_ENABLED is true by default
 weibull_cache_enabled = os.environ.get('WEIBULL_CACHE_ENABLED', 'true').lower() not in ('false', 'off', '0', 'no')
 
 _weibull_cache = None
@@ -43,7 +44,7 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
 
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
     with db_hitdata.get_cursor() as cursor:
-        sql_query = """SELECT w.PART, w.ASSET_ID, w.RUNNING_TIME, w.STATUS, w.FAILURE_DATE FROM weibull_data w
+        sql_query = """SELECT w.PART, w.ASSET_ID, w.RUNNING_TIME, w.STATUS, w.FAILURE_DATE, w.CURRENT_STATE FROM weibull_data w
                             JOIN (
                                 SELECT PART FROM weibull_data 
                                 WHERE STATUS = 'F'
@@ -57,7 +58,7 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
         for row in result:
             data.append(row)
 
-    weibull_data = pd.DataFrame(data, columns=['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE'])
+    weibull_data = pd.DataFrame(data, columns=['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE'])
 
     if weibull_data.shape[0] == 0:
         raise DataError(f'No parts found with more than {failure_threshold} failures and {distinct_threshold} distinct failures')
@@ -73,19 +74,22 @@ def get_data(part):
     failures = []
     suspensions = []
     irp_dates = []
+    current_state = []
 
-    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
+    # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE,CURRENT_STATE
     # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
     with db_hitdata.get_cursor() as cursor:
-        sql_query = "SELECT RUNNING_TIME, STATUS, FAILURE_DATE FROM weibull_data WHERE PART = :part_id"
+        sql_query = "SELECT RUNNING_TIME, STATUS, FAILURE_DATE, CURRENT_STATE FROM weibull_data WHERE PART = :part_id"
         result = cursor.execute(sql_query, {"part_id": part})
 
         for row in result:
             if row[1] == 'S':
                 suspensions.append(int(row[0]))
+                current_state.append(int(row[3]))
             elif row[1] == 'F':
                 failures.append(int(row[0]))
                 irp_dates.append(str(row[2]))
+                current_state.append(int(row[3]))
             else:
                 raise DataError('Unknown status "{0}"'.format(row[1]))
 
@@ -100,7 +104,7 @@ def get_data(part):
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'Less than 4 failures in total for "{part}"! The results should not be trusted.', UserWarning)
 
-    return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates}
+    return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates, 'current_state': current_state}
 
 
 def get_parts(failure_threshold=4, distinct_threshold=2):
