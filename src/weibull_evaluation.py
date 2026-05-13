@@ -8,21 +8,24 @@ from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, 
 
 
 
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, cv_results: dict | None = None, selection_method: str = 'cv'):
+def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC'):
     """
-    Determine the best distribution using:
-      - Information criteria (AICc/BIC) only        → selection_method='ic'
-      - Cross-validation (CV) with consistency check → selection_method='cv' and cv_results provided
+    Central model selection.
+
+    sort_by:
+      - 'AICc' or 'BIC' → use pure information-criterion selection.
+      - 'CV'            → try cross-validation; if not feasible, fall back to IC using ic_fallback.
 
     Behavior:
-      - Always computes ΔAICc and ΔBIC and adds them as columns.
-      - If selection_method='cv' AND cv_results['cv_has_valid_models'] is True:
-          * Use cv_results['cv_parsimonious_winner'] as the winner.
-          * If that winner is NOT in the intersection of strong-support sets
-            (ΔAICc<2 and ΔBIC<2), print a warning.
-      - In all other cases, fall back to the original IC rule:
-          * If AICc and BIC winners agree, use that distribution.
-          * Otherwise, use the user's sort_by column.
+      - Always computes ΔAICc / ΔBIC and strong-support sets (Δ<2).
+      - If sort_by == 'CV' AND data is provided AND CV is feasible:
+          * Calls cross_validate_weibull_models(failures, censored)
+          * Uses cv_parsimonious_winner as the winner
+          * Warns if CV winner is NOT in strong-support set of AICc/BIC (Δ>=2)
+      - Otherwise:
+          * Uses the original IC rule:
+              - If AICc and BIC winners agree → that distribution.
+              - Else → use ic_fallback column ('AICc' or 'BIC').
     """
     df = df.reset_index(drop=True).copy()
 
@@ -47,42 +50,72 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, cv_resu
     bic_strong  = set(df.loc[df['delta_BIC']  < 2.0, 'Distribution'])
     strong_both = aicc_strong & bic_strong
 
-    # 3) Optionally use CV (if requested and feasible)
-    use_cv = (
-        selection_method.lower() == "cv" and
-        cv_results is not None and
-        cv_results.get("cv_has_valid_models", False)
-    )
+    complexity = {"Weibull 2P": 2,
+                  "Weibull 3P": 3,
+                  "Competing Risk": 4,
+                  "Weibull Mixture": 5,
+                  }
 
-    if use_cv:
-        winner_cv = cv_results.get("cv_parsimonious_winner", None)
-
-        if winner_cv is None:
-            # Fallback to IC rule if CV did not produce a winner
-            pass
+    # Helper: IC selection with parsimony (Δ <= 2)
+    def _select_by_ic(fallback_col: str):
+        # 1) Decide primary IC column to use
+        if best_aicc == best_bic:
+            primary_col = "AICc"  # both agree, doesn't matter which one we use
+            primary_best_dist = best_aicc
         else:
-            # Consistency check with AICc/BIC
-            if winner_cv not in strong_both:
-                # You can later replace this print by logger.warning if desired
-                print(
-                    f'For {part}: ⚠ CV winner "{winner_cv}" is NOT in strong-support '
-                    f'set of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.'
-                )
-            return winner_cv
+            if fallback_col not in ("AICc", "BIC"):
+                raise KeyError(f"compare_best_distribution: fallback_col='{fallback_col}' not in {{'AICc','BIC'}} for part '{part}'")
+            primary_col = fallback_col
+            primary_best_dist = df.at[df[primary_col].idxmin(), 'Distribution']
 
-    # 4) Fallback / default: pure IC rule (original behavior)
-    if best_aicc == best_bic:
-        return best_aicc
-    else:
-        if sort_by not in df.columns:
-            raise KeyError(f"compare_best_distribution: sort_by='{sort_by}' not in result columns for part '{part}'")
+        # 2) Compute deltas for the chosen IC column
+        min_ic = df[primary_col].min()
+        delta_col = df[primary_col] - min_ic
 
-        resolved = df.at[df[sort_by].idxmin(), 'Distribution']
-        print(
-            f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: '
-            f'disagreement, using sort_by="{sort_by}" → {resolved}'
-        )
+        # 3) Models within Δ <= 2 of the best
+        support_mask = delta_col <= (min_ic + 2 - min_ic)  # equivalently delta_col <= 2.0
+        candidate_dists = df.loc[support_mask, 'Distribution'].tolist()
+
+        if not candidate_dists:
+            # Should not happen, but fall back to numeric best
+            resolved = primary_best_dist
+        else:
+            # 4) Parsimony: choose simplest among candidates
+            resolved = min(candidate_dists, key=lambda d: complexity.get(d, np.inf))
+
+        # For transparency when AICc/BIC disagree
+        if best_aicc != best_bic:
+            print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: '
+                  f'disagreement, using "{primary_col}" with Δ<=2 and parsimony → {resolved}'
+                  )
+
         return resolved
+
+    # 3) Decide mode based on sort_by
+    if sort_by == "CV":
+        # Try CV; if not feasible, use ic_fallback (AICc/BIC)
+        if data is not None:
+            failures = np.asarray(data.failures, dtype=float)
+            censored = np.asarray(data.suspensions, dtype=float) if getattr(data, "suspensions", None) is not None else None
+
+            cv_results = cross_validate_weibull_models(failures=failures, censored=censored, seed=42, n_folds=5)
+
+            if cv_results.get("cv_has_valid_models", False):
+                winner_cv = cv_results.get("cv_parsimonious_winner", None)
+                if winner_cv is not None:
+                    if winner_cv not in strong_both:
+                        print(f'For {part}: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
+                              f'of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.'
+                              )
+                    return winner_cv
+        # If data is None or CV not feasible → fall back
+        return _select_by_ic(ic_fallback)
+
+    else:
+        # Pure IC mode: sort_by is 'AICc' or 'BIC'
+        fallback_col = sort_by if sort_by in ("AICc", "BIC") else ic_fallback
+
+        return _select_by_ic(fallback_col)
 
 
 def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
