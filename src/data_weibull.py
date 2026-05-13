@@ -85,11 +85,11 @@ def get_data(part):
         for row in result:
             if row[1] == 'S':
                 suspensions.append(int(row[0]))
-                current_state.append(int(row[3]))
+                current_state.append(str(row[3]))
             elif row[1] == 'F':
                 failures.append(int(row[0]))
                 irp_dates.append(str(row[2]))
-                current_state.append(int(row[3]))
+                current_state.append(str(row[3]))
             else:
                 raise DataError('Unknown status "{0}"'.format(row[1]))
 
@@ -210,6 +210,7 @@ def _get_cached_or_direct_data(part=None):
             return get_all_data()
 
 
+# ToDo: Include the current state for these functions to make it available
 def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_global):
     # This exception is needed since the return of data_weibull.get_parts() is already formatted correctly
     if not weibull_cache_enabled and part is not None:
