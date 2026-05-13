@@ -50,53 +50,78 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
     bic_strong  = set(df.loc[df['delta_BIC']  < 2.0, 'Distribution'])
     strong_both = aicc_strong & bic_strong
 
-    complexity = {"Weibull 2P": 2,
-                  "Weibull 3P": 3,
-                  "Competing Risk": 4,
-                  "Weibull Mixture": 5,
-                  }
+    complexity = {"Weibull_2P": 2,
+                  "Weibull_3P": 3,
+                  "Weibull_CR": 4,
+                  "Weibull_Mixture": 5}
 
     # Helper: IC selection with parsimony (Δ <= 2)
     def _select_by_ic(fallback_col: str):
-        # 1) Decide primary IC column to use
+        """
+        IC-based selection with Δ<=2 and parsimony.
+
+        Reports:
+          - primary IC column used (AICc/BIC)
+          - numeric IC best (without parsimony)
+          - final winner with parsimony
+          - whether parsimony changed the winner
+        """
+        # 1) Decide primary IC column and numeric IC winner
         if best_aicc == best_bic:
-            primary_col = "AICc"  # both agree, doesn't matter which one we use
-            primary_best_dist = best_aicc
+            primary_col = "AICc"
+            ic_numeric_winner = best_aicc
         else:
             if fallback_col not in ("AICc", "BIC"):
-                raise KeyError(f"compare_best_distribution: fallback_col='{fallback_col}' not in {{'AICc','BIC'}} for part '{part}'")
+                raise KeyError(
+                    f"compare_best_distribution: fallback_col='{fallback_col}' not in {{'AICc','BIC'}} for part '{part}'")
             primary_col = fallback_col
-            primary_best_dist = df.at[df[primary_col].idxmin(), 'Distribution']
+            ic_numeric_winner = df.at[df[primary_col].idxmin(), 'Distribution']
 
-        # 2) Compute deltas for the chosen IC column
+        # 2) Compute deltas for primary IC
         min_ic = df[primary_col].min()
-        delta_col = df[primary_col] - min_ic
+        delta_values = df[primary_col] - min_ic
 
-        # 3) Models within Δ <= 2 of the best
-        support_mask = delta_col <= (min_ic + 2 - min_ic)  # equivalently delta_col <= 2.0
+        # 3) Support set: models within Δ <= 2
+        support_mask = (delta_values <= 2.0)
         candidate_dists = df.loc[support_mask, 'Distribution'].tolist()
 
         if not candidate_dists:
-            # Should not happen, but fall back to numeric best
-            resolved = primary_best_dist
+            # This should not happen, but fall back to numeric best
+            final_winner = ic_numeric_winner
         else:
-            # 4) Parsimony: choose simplest among candidates
-            resolved = min(candidate_dists, key=lambda d: complexity.get(d, np.inf))
+            # 4) Parsimony: choose simplest model among candidates
+            final_winner = min(candidate_dists, key=lambda d: complexity.get(d, np.inf))
 
-        # For transparency when AICc/BIC disagree
-        if best_aicc != best_bic:
-            print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: '
-                  f'disagreement, using "{primary_col}" with Δ<=2 and parsimony → {resolved}'
-                  )
+        # 5) Feedback message
+        parsimony_changed = (final_winner != ic_numeric_winner)
 
-        return resolved
+        if best_aicc == best_bic:
+            # AICc and BIC agree numerically
+            if parsimony_changed:
+                print(f'For {part}: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                      f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
+            else:
+                print(f'For {part}: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                      f'and parsimony kept the same model.')
+        else:
+            # AICc and BIC disagree → we used primary_col as the IC basis
+            if parsimony_changed:
+                print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                      f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
+                      f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
+            else:
+                print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                      f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
+                      f'parsimony did not change the winner.')
+
+        return final_winner
 
     # 3) Decide mode based on sort_by
     if sort_by == "CV":
         # Try CV; if not feasible, use ic_fallback (AICc/BIC)
         if data is not None:
-            failures = np.asarray(data.failures, dtype=float)
-            censored = np.asarray(data.suspensions, dtype=float) if getattr(data, "suspensions", None) is not None else None
+            failures = np.asarray(data['failures'], dtype=float)
+            censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
             cv_results = cross_validate_weibull_models(failures=failures, censored=censored, seed=42, n_folds=5)
 
@@ -105,8 +130,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                 if winner_cv is not None:
                     if winner_cv not in strong_both:
                         print(f'For {part}: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
-                              f'of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.'
-                              )
+                              f'of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.')
                     return winner_cv
         # If data is None or CV not feasible → fall back
         return _select_by_ic(ic_fallback)
@@ -123,33 +147,31 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     failuresize = len(failures)
     distinctfailurecount = len(np.unique(failures))
 
-    candidates = ['Weibull 2P', 'Weibull 3P', 'Competing Risk', 'Weibull Mixture']
+    candidates = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
 
     # Start by assuming all four are possible
     allowed = set(candidates)
 
     # Mirror the logic of weibull_fit_best for 3P/CR/Mixture
     if distinctfailurecount < 3:
-        allowed -= {'Weibull 3P', 'Competing Risk', 'Weibull Mixture'}
+        allowed -= {'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture'}
     elif distinctfailurecount < 4:
-        allowed -= {'Competing Risk', 'Weibull Mixture'}
+        allowed -= {'Weibull_CR', 'Weibull_Mixture'}
     elif distinctfailurecount < 5:
         if failuresize < 16:
-            allowed -= {'Competing Risk', 'Weibull Mixture'}
+            allowed -= {'Weibull_CR', 'Weibull_Mixture'}
         else:
-            allowed -= {'Weibull Mixture'}
+            allowed -= {'Weibull_Mixture'}
     else:
         if failuresize < 16:
-            allowed -= {'Competing Risk', 'Weibull Mixture'}
+            allowed -= {'Weibull_CR', 'Weibull_Mixture'}
         # else: keep all
 
     # Technical minima: 2P needs >=2 failures, 3P>=3, CR>=4, Mixture>=5
-    min_fail = {
-        'Weibull 2P': 2,
-        'Weibull 3P': 3,
-        'Competing Risk': 4,
-        'Weibull Mixture': 5,
-    }
+    min_fail = {'Weibull_2P': 2,
+                'Weibull_3P': 3,
+                'Weibull_CR': 4,
+                'Weibull_Mixture': 5}
     allowed = {m for m in allowed if failuresize >= min_fail[m]}
 
     return sorted(allowed)
@@ -178,13 +200,11 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     n_fail = len(failures)
     if n_fail < 2:
         # No model is feasible
-        return {
-            "avg_cv_nll": {},
-            "cv_numeric_winner": None,
-            "cv_equivalent_models": [],
-            "cv_parsimonious_winner": None,
-            "cv_has_valid_models": False,
-        }
+        return {"avg_cv_nll": {},
+                "cv_numeric_winner": None,
+                "cv_equivalent_models": [],
+                "cv_parsimonious_winner": None,
+                "cv_has_valid_models": False}
 
     # ------------------------------------------------------------------
     # 0. Global feasibility per model
@@ -193,14 +213,13 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
 
     if not globally_allowed:
         # CV not meaningful (no candidate model has enough failures)
-        all_model_names = ['Weibull 2P', 'Weibull 3P', 'Competing Risk', 'Weibull Mixture']
+        all_model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
 
         return {"avg_cv_nll": {name: float("inf") for name in all_model_names},
                 "cv_numeric_winner": None,
                 "cv_equivalent_models": [],
                 "cv_parsimonious_winner": None,
-                "cv_has_valid_models": False
-                }
+                "cv_has_valid_models": False}
 
     # status: 0 = failure, 1 = censored
     status_labels = np.concatenate([np.zeros(len(failures), dtype=int), np.ones(len(censored), dtype=int)])
@@ -220,17 +239,15 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     # ------------------------------------------------------------------
     skf = RepeatedStratifiedKFold(n_splits=n_folds, n_repeats=1, random_state=seed)
 
-    model_names = ['Weibull 2P', 'Weibull 3P', 'Competing Risk', 'Weibull Mixture']
+    model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
     cv_results = {name: [] for name in model_names}
     mle_fail_flags = {name: False for name in model_names}
 
     # Fold-level minimum failures per model
-    fold_min_fail = {
-        "Weibull 2P": 2,
-        "Weibull 3P": 3,
-        "Competing Risk": 5,
-        "Weibull Mixture": 5,
-    }
+    fold_min_fail = {"Weibull_2P": 2,
+                     "Weibull_3P": 3,
+                     "Weibull_CR": 4,
+                     "Weibull_Mixture": 5}
 
     # ------------------------------------------------------------------
     # 3. Fold loop
@@ -264,15 +281,13 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
         # ------------------------------------------------------------------
         # 3a. Fit models (only those allowed globally and with enough train failures)
         # ------------------------------------------------------------------
-        fold_args = dict(
-            failures=f_train,
-            right_censored=c_train if len(c_train) > 0 else None,
-            show_probability_plot=False,
-            print_results=False,
-            method="MLE",
-            CI_type="none",
-            optimizer="best",
-        )
+        fold_args = dict(failures=f_train,
+                         right_censored=c_train if len(c_train) > 0 else None,
+                         show_probability_plot=False,
+                         print_results=False,
+                         method="MLE",
+                         CI_type="none",
+                         optimizer="best")
 
         models = {}
 
@@ -293,10 +308,10 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
                 return None
             return res
 
-        models['Weibull 2P'] = _fit_or_none(Fit_Weibull_2P, 'Weibull 2P')
-        models['Weibull 3P'] = _fit_or_none(Fit_Weibull_3P, 'Weibull 3P')
-        models['Competing Risk'] = _fit_or_none(Fit_Weibull_CR, 'Competing Risk')
-        models['Weibull Mixture'] = _fit_or_none(Fit_Weibull_Mixture, 'Weibull Mixture')
+        models['Weibull_2P'] = _fit_or_none(Fit_Weibull_2P, 'Weibull_2P')
+        models['Weibull_3P'] = _fit_or_none(Fit_Weibull_3P, 'Weibull_3P')
+        models['Weibull_CR'] = _fit_or_none(Fit_Weibull_CR, 'Weibull_CR')
+        models['Weibull_Mixture'] = _fit_or_none(Fit_Weibull_Mixture, 'Weibull_Mixture')
 
         # ------------------------------------------------------------------
         # 3b. Compute robust NLL for validation
@@ -308,17 +323,17 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
                     dist = model.distribution
 
                     # 3P guard
-                    if name == 'Weibull 3P' and hasattr(dist, 'gamma') and np.any(f_val < dist.gamma):
+                    if name == 'Weibull_3P' and hasattr(dist, 'gamma') and np.any(f_val < dist.gamma):
                         cv_results[name].append(float("inf"))
                         continue
 
-                    pdf_vals = dist.PDF(f_val)
+                    pdf_vals = dist.PDF(f_val, show_plot=False)
                     pdf_vals = np.where(pdf_vals <= 0, 1e-50, pdf_vals)
                     pdf_vals = np.where(pdf_vals > 1e50, 1e50, pdf_vals)
                     log_lik_failures = np.sum(np.log(pdf_vals))
 
                     if len(c_val) > 0:
-                        sf_vals = dist.SF(c_val)
+                        sf_vals = dist.SF(c_val, show_plot=False)
                         sf_vals = np.where(sf_vals <= 0, 1e-50, sf_vals)
                         sf_vals = np.where(sf_vals >= 1, 1 - 1e-12, sf_vals)
                         log_lik_censored = np.sum(np.log(sf_vals))
@@ -354,13 +369,11 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
 
     if len(valid_models) == 0:
         # None of the models had usable CV scores → CV not feasible
-        return {
-            "avg_cv_nll": avg_cv_nll,
-            "cv_numeric_winner": None,
-            "cv_equivalent_models": [],
-            "cv_parsimonious_winner": None,
-            "cv_has_valid_models": False,
-        }
+        return {"avg_cv_nll": avg_cv_nll,
+                "cv_numeric_winner": None,
+                "cv_equivalent_models": [],
+                "cv_parsimonious_winner": None,
+                "cv_has_valid_models": False}
 
     # numeric winner among valid models
     best_name = min(valid_models, key=lambda m: avg_cv_nll[m])
@@ -401,20 +414,25 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
         if p_val >= bonferroni_threshold:
             equivalent_group.append(model_name)
 
-    complexity = {
-        "Weibull 2P": 2,
-        "Weibull 3P": 3,
-        "Competing Risk": 4,
-        "Weibull Mixture": 5,
-    }
+    complexity = {"Weibull_2P": 2,
+                  "Weibull_3P": 3,
+                  "Weibull_CR": 4,
+                  "Weibull_Mixture": 5}
 
     final_model = min(equivalent_group, key=lambda m: complexity.get(m, np.inf))
 
-    return {
-        "avg_cv_nll": avg_cv_nll,
-        "cv_numeric_winner": best_name,
-        "cv_equivalent_models": equivalent_group,
-        "cv_parsimonious_winner": final_model,
-        "cv_has_valid_models": True,
-    }
+    # Feedback: did parsimony change the CV winner?
+    parsimony_changed = (final_model != best_name)
+    if parsimony_changed:
+        print(f'CV: numeric best (avg NLL) → {best_name}, '
+              f'but Nadeau & Bengio equivalence + parsimony selected simpler model → {final_model}.')
+    else:
+        print(f'CV: numeric best (avg NLL) → {best_name}, '
+              f'parsimony (within equivalence group) kept the same model.')
+
+    return {"avg_cv_nll": avg_cv_nll,
+            "cv_numeric_winner": best_name,
+            "cv_equivalent_models": equivalent_group,
+            "cv_parsimonious_winner": final_model,
+            "cv_has_valid_models": True}
 
