@@ -16,6 +16,7 @@ from weibull_ci import weibull_cr_analytical_bounds
 from weibull_ci import weibull_mixture_fisher_bounds
 from weibull_ci import weibull_mixture_bootstrap_bounds
 from weibull_ci import weibull_mixture_analytical_bounds
+from weibull_evaluation import compare_best_distribution
 #from reliability.Other_functions import distribution_explorer
 import io
 import os
@@ -559,25 +560,6 @@ def validate_ci(value_str: str, default: float = 0.95):
         return None, "Invalid input, please enter a number (e.g. 0.95)."
 
 
-# ToDo: Outsource this function to weibull_evaluation.py
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
-    """
-    Determines the best distribution by comparing AICc and BIC winners.
-    If both agree → take that result.
-    If they disagree → fall back to the user's sort_by preference.
-    """
-    df = df.reset_index(drop=True)
-
-    best_aicc = df.at[df['AICc'].idxmin(), 'Distribution']
-    best_bic  = df.at[df['BIC'].idxmin(), 'Distribution']
-
-    if best_aicc == best_bic:
-        return best_aicc
-    else:
-        resolved = df.at[df[sort_by].idxmin(), 'Distribution']
-        print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
-        return resolved
-
 # ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
 def automated_weibull(save_path=None):
     failure_threshold = ask_threshold("Failure threshold", default=4)
@@ -594,12 +576,15 @@ def automated_weibull(save_path=None):
     parts_data_fit_all = []
     parts_best_distribution_names = []
 
+    # Internal sort column for FitEverything if user chose CV
+    sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+
     for part in part_names_hit:
-        wb_data_fit_all, wb_best_distribution_name, _ = weibull_fit_best(part=part, sort_by=sort_by)
+        wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
         wb_data_fit_all['PART'] = part
 
-        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
         wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
 
@@ -659,9 +644,9 @@ def manual_weibull(part):
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
-    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
+    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data),
@@ -693,7 +678,7 @@ def generate_graph_new(part, sort_by='BIC', ci=0.95):
 
     wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data),
@@ -754,9 +739,9 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95)
 
-    parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_AICc')
+    # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_AICc')
 
-    # manual_weibull(part='HCCVSWB')
+    manual_weibull(part='HCCVSWB')
     # weibull_cr(part='HCCVSEA')
     # weibull_mixture(part='HCCVSWB')
 #     # data, _, name = manual_weibull('HCCFISA')
