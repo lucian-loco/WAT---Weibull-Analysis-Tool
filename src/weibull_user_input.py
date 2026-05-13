@@ -22,17 +22,23 @@ def ask_threshold(name: str, default: int):
 
 def ask_sort_by(default: str = 'BIC'):
     """
-    Asks the user to choose the sort by.
+    Asks the user to choose the sort by / selection method.
+    Valid options:
+      - 'AICc'  → pure information-criterion selection (AICc/BIC rule)
+      - 'BIC'   → pure information-criterion selection (AICc/BIC rule)
+      - 'CV'    → cross-validation-driven selection (with IC fallback)
     """
-    valid_options = ['AICc', 'BIC']
+    valid_options = ['AICc', 'BIC', 'CV']
     while True:
-        user_input = input(f"Enter sort method {valid_options} and press enter (Default value: {default}): ").strip()
+        user_input = input(
+            f"Enter selection method {valid_options} and press enter (Default value: {default}): "
+        ).strip()
         if user_input == "":
             return default
         if user_input in valid_options:
             return user_input
         else:
-            print(f"  → Invalid input, please enter one of {valid_options}.")
+            print(f" → Invalid input, please enter one of {valid_options}.")
 
 
 def ask_ci(default: float = 0.95):
