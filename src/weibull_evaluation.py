@@ -380,6 +380,7 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     best_scores = np.array([s for s in cv_results[best_name] if np.isfinite(s)])
 
     alpha = 0.05
+    # ToDo: Check this parameter whether fix like in Davids script
     n_comparisons = len(valid_models) - 1
     bonferroni_threshold = alpha / n_comparisons if n_comparisons > 0 else 1.0
 
