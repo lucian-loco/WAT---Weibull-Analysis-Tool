@@ -37,7 +37,7 @@
     {# part is kept as URL parameter so it is available in the POST request #}
     <form action="/weibull_new?part={{ part }}" method="post">
 
-        <label for="sort_by">Sort by</label>
+        <label for="sort_by">Selection method</label>
         <select id="sort_by" name="sort_by">
             <option value="BIC"  {% if defaults.sort_by == 'BIC'  %}selected{% endif %}>BIC</option>
             <option value="AICc" {% if defaults.sort_by == 'AICc' %}selected{% endif %}>AICc</option>
@@ -46,7 +46,7 @@
             <span class="error"> → {{ errors.sort_by }}</span>
         {% endif %}
 
-        <label for="ci">Confidence Interval (0–1)</label>
+        <label for="ci">Confidence Interval [0–1)</label>
         <input type="number" id="ci" name="ci"
                value="{{ defaults.ci }}"
                step="0.01" min="0.01" max="0.99">
