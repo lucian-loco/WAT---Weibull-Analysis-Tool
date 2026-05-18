@@ -102,7 +102,7 @@ def route_weibull_plot():
     return send_file(graph, mimetype='image/png')
 
 
-@app.route('/weibull', methods=['GET'])
+@app.route('/weibull_sf', methods=['GET'])
 def route_reliability_plot():
     try:
         part = request.args.get('part')
