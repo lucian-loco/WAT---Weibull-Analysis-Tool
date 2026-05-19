@@ -41,6 +41,7 @@
         <select id="sort_by" name="sort_by">
             <option value="BIC"  {% if defaults.sort_by == 'BIC'  %}selected{% endif %}>BIC</option>
             <option value="AICc" {% if defaults.sort_by == 'AICc' %}selected{% endif %}>AICc</option>
+            <option value="CV"   {% if defaults.sort_by == 'CV' %}selected{% endif %}>CV</option>
         </select>
         {% if errors.sort_by %}
             <span class="error"> → {{ errors.sort_by }}</span>
