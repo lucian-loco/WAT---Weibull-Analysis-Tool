@@ -31,7 +31,7 @@ def ask_sort_by(default: str = 'BIC'):
     valid_options = ['AICc', 'BIC', 'CV']
     while True:
         user_input = input(
-            f"Enter selection method {valid_options} and press enter (Default value: {default}): "
+            f"Enter selection method {valid_options} and press enter (Recommended: CV, but default value as fallback: {default}): "
         ).strip()
         if user_input == "":
             return default
