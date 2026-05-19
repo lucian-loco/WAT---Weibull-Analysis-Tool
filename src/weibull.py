@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 #Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
-from predictr import Analysis
 from data_weibull import get_parts
 from data_weibull import get_cache_timestamp
 from data_weibull import get_failures_and_suspensions
@@ -16,16 +15,17 @@ from weibull_ci import weibull_cr_analytical_bounds
 from weibull_ci import weibull_mixture_fisher_bounds
 from weibull_ci import weibull_mixture_bootstrap_bounds
 from weibull_ci import weibull_mixture_analytical_bounds
-#from reliability.Other_functions import distribution_explorer
-#from reliability.Other_functions import make_right_censored_data
+from weibull_evaluation import compare_best_distribution
 import io
+import os
 import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import LogLocator, FuncFormatter
+from matplotlib.ticker import LogLocator, FuncFormatter, MultipleLocator
 from utils import get_logger
 logger = get_logger(__name__)
+# ToDo: Every Confidence Bound with analytical algorithm for consistency
 
 
 # ToDo: Include "if res.optimizer is None:" to check whether the fit was successful
@@ -77,7 +77,7 @@ def plot_settings(fit, upper_quantile=0.999):
     ax.text(0.99, 0.01, ts_text, transform=ax.transAxes, fontsize=8, horizontalalignment='right', verticalalignment='bottom',
             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray'))
 
-    return ax, fig, xmin, xmax_new
+    return ax, fig, float(xmin), float(xmax_new)
 
 
 # The distribution is not calculated for the full range of xvals by default, this function extends the MLE fit
@@ -100,11 +100,41 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
 
     return xvals, n_points
 
+
+def plot_settings_sf(xmax):
+    fig = plt.gcf()
+    fig.set_size_inches(9.5, 6)
+
+    ax = plt.gca()
+    ax.set_xlabel('Time in days')
+    ax.set_ylabel('Reliability / survival probability')
+    ax.yaxis.set_major_locator(MultipleLocator(0.1))
+    ax.grid(True, which='major', linestyle='--', linewidth=0.6, alpha=0.7, color='gray')
+    ax.grid(True, which='minor', linestyle=':', linewidth=0.3, alpha=0.4, color='gray')
+    ax.minorticks_on()
+    ax.set_axisbelow(True)
+    ax.set_ylim(0, 1.05)
+    ax.set_xlim(0, xmax)
+
+    # Cache timestamp box
+    ts = get_cache_timestamp()
+    if ts is not None:
+        ts_text = f'Data as of: {ts.strftime("%d.%m.%Y %H:%M")}'
+    else:
+        ts_text = 'Data as of: unknown'
+
+    ax.text(0.99, 0.96, ts_text, transform=ax.transAxes, fontsize=8, horizontalalignment='right',
+            verticalalignment='bottom',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray'))
+
+    return ax
+
+
 #ToDo: Outsource access to data and only one time for every part --> include it in the automatic weibull and give data as input for the 4 weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_2p(part, ci=0.95, save_path=None, data=None):
+def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -112,24 +142,26 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
         ci_type = 'none'
+        plot_CI = False
         ci = 0.95  # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
     else:
         ci_type = 'reliability'
+        plot_CI = True
 
     plt.figure()
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -143,7 +175,20 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
-    ax, fig,_ ,_ = plot_settings(wb)
+    ax, fig, xmin, xmax_new = plot_settings(wb)
+
+    if return_sf:
+        plt.close()
+        plt.figure()
+
+        try:
+            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new * 1.2, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
+        except Exception as e:
+            raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
+
+        plot_settings_sf(xmax=xmax_new)
+        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
+        fig.tight_layout()
 
     if save_path:
         plt.savefig(save_path)
@@ -158,7 +203,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 3P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_3p(part, ci=0.95, save_path=None, data=None):
+def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -166,24 +211,26 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     if ci == 0.0:
         ci_type = 'none'
+        plot_CI = False
         ci = 0.95   # Standard value for CI in Fit_Weibull_Mixture --> CI=0.0 creates error | only affects the confidence bounds on the variables
     else:
         ci_type = 'reliability'
+        plot_CI = True
 
     plt.figure()
     # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
@@ -197,8 +244,21 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
         raise RuntimeError(f'Weibull 3P fitting failed for "{part}": {e}')
 
     plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
-    ax, fig, _, _ = plot_settings(wb)
+    ax, fig, xmin, xmax_new = plot_settings(wb)
     ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
+
+    if return_sf:
+        plt.close()
+        plt.figure()
+
+        try:
+            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new * 1.2, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
+        except Exception as e:
+            raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
+
+        plot_settings_sf(xmax=xmax_new)
+        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
+        fig.tight_layout()
 
     if save_path:
         plt.savefig(save_path)
@@ -213,7 +273,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_mixture(part, ci=0.95, save_path=None, data=None):
+def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -221,7 +281,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     if failure_size < 4:
@@ -232,13 +292,13 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -252,7 +312,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     try:
         wb = Fit_Weibull_Mixture(failures=data['failures'], right_censored=data['suspensions'],
                                 show_probability_plot=True, print_results=False,    # Results can be found in the returned variables as well
-                                optimizer='best',                                  # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
+                                optimizer='best',                                   # Run with all Optimizers: “TNC”, “L-BFGS-B”, “nelder-mead”, and “powell”
                                 CI=ci,
                                 label=f'Weibull Mixture fit | MLE \n (n = {sample_size} (f: {failure_size} | s: {suspension_size})')
     except Exception as e:
@@ -271,26 +331,29 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+
+    if return_sf:
+        plt.close()
+        plt.figure()
+
+        try:
+            wb_sf = wb.distribution.SF(xvals=xvals, show_plot=True, plot_components=True)
+        except Exception as e:
+            raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
+
+        ax = plot_settings_sf(xmax=xmax_rel)
+        lines = ax.get_lines()
+        # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
+        lines[-3].set_color('C2')  # Green for component 1
+        lines[-2].set_color('C1')  # Orange for component 2
+        lines[-1].set_color('C0')  # Blue for mixture
+        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
+
     if ci_mc != 0.0:
-        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
-        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
-
-        lower_mc, upper_mc = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                     right_censored=data['suspensions'], CI=ci)
-
-        if lower_mc is not None and upper_mc is not None:
-            ax.fill_between(
-                xvals,
-                lower_mc,
-                upper_mc,
-                alpha=0.3,
-                label=f'{int(ci * 100)}% numerical Fisher CI'
-            )
-        # --------------------------------------------------------------------------------------------------------------
-
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
         lower_analytic, upper_analytic, p_lower, p_upper = weibull_mixture_analytical_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                                           right_censored=data['suspensions'], CI=ci)
+                                                                           right_censored=data['suspensions'], CI=ci, return_sf=return_sf)
 
         if lower_analytic is not None and upper_analytic is not None:
             ax.fill_between(
@@ -298,28 +361,28 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
                 lower_analytic,
                 upper_analytic,
                 alpha=0.3,
-                label=f'{int(ci * 100)}% analytical Fisher CI'
+                # label=f'{int(ci * 100)}% analytical CI'
             )
         # --------------------------------------------------------------------------------------------------------------
+
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        # lower_mc, upper_mc = weibull_mixture_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+        #                                              right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_mc is not None and upper_mc is not None:
+        #     ax.fill_between(xvals, lower_mc, upper_mc, alpha=0.3, label=f'{int(ci * 100)}% numerical Fisher CI')
+        # --------------------------------------------------------------------------------------------------------------
         # print(f'Starting with the bootstrapping...')
-        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
         # lower_bootstrap, upper_bootstrap = weibull_mixture_bootstrap_bounds(xvals=xvals, failures=data['failures'],
         #                                                                    right_censored=data['suspensions'], CI=ci)
         #
         # if lower_bootstrap is not None and upper_bootstrap is not None:
-        #     ax.fill_between(
-        #         xvals,
-        #         lower_bootstrap,
-        #         upper_bootstrap,
-        #         alpha=0.3,
-        #         facecolor='none',
-        #         edgecolor='fuchsia',
-        #         label=f'{int(ci * 100)}% Bootstrapping CI',
-        #         hatch='oo'
-        #     )
-        # # --------------------------------------------------------------------------------------------------------------
+        #     ax.fill_between(xvals, lower_bootstrap, upper_bootstrap, alpha=0.3, facecolor='none', edgecolor='fuchsia', label=f'{int(ci * 100)}% Bootstrapping CI', hatch='oo')
+        # --------------------------------------------------------------------------------------------------------------
 
-    plt.legend(loc='upper left')
+    fig.tight_layout()
+    plt.legend(loc='best')
 
     if save_path:
         plt.savefig(save_path)
@@ -334,7 +397,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Competing Risks with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_cr(part, ci=0.95, save_path=None, data=None):
+def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -342,7 +405,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
         data = get_failures_and_suspensions(part)
 
     failure_size = len(data['failures'])
-    suspension_size = len(data['suspensions'])
+    suspension_size = len(data['suspensions']) if data.get('suspensions') is not None else 0
     sample_size = failure_size + suspension_size
 
     if failure_size < 4:
@@ -353,13 +416,13 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
             warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     ci_mc = ci
@@ -392,26 +455,29 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
+    xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
+
+    if return_sf:
+        plt.close()
+        plt.figure()
+
+        try:
+            wb_sf = wb.distribution.SF(xvals=xvals, show_plot=True, plot_components=True)
+        except Exception as e:
+            raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
+
+        ax = plot_settings_sf(xmax=xmax_rel)
+        lines = ax.get_lines()
+        # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
+        lines[-3].set_color('C2')  # Green for component 1
+        lines[-2].set_color('C1')  # Orange for component 2
+        lines[-1].set_color('C0')  # Blue for mixture
+        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
+
     if ci_mc != 0.0:
-        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
-        xvals = np.logspace(np.log10(xmin_rel), np.log10(xmax_rel), 1000 + n_points)
-
-        lower_mc, upper_mc = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                      right_censored=data['suspensions'], CI=ci)
-
-        if lower_mc is not None and upper_mc is not None:
-            ax.fill_between(
-                xvals,
-                lower_mc,
-                upper_mc,
-                alpha=0.3,
-                label=f'{int(ci * 100)}% numerical Fisher CI'
-            )
-        # --------------------------------------------------------------------------------------------------------------
-
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
         lower_analytical, upper_analytical, _, _ = weibull_cr_analytical_bounds(fit=wb, xvals=xvals, failures=data['failures'],
-                                                                                right_censored=data['suspensions'],CI=ci)
+                                                                                right_censored=data['suspensions'], CI=ci, return_sf=return_sf)
 
         if lower_analytical is not None and upper_analytical is not None:
             ax.fill_between(
@@ -419,28 +485,27 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
                 lower_analytical,
                 upper_analytical,
                 alpha=0.3,
-                label=f'{int(ci * 100)}% analytical Fisher CI'
+                # label=f'{int(ci * 100)}% analytical CI'
             )
+
+        # Calculation of the Confidence Interval:-----------------------------------------------------------------------
+        # lower_mc, upper_mc = weibull_cr_fisher_bounds(fit=wb, xvals=xvals, failures=data['failures'],
+        #                                               right_censored=data['suspensions'], CI=ci)
+        #
+        # if lower_mc is not None and upper_mc is not None:
+        #     ax.fill_between(xvals, lower_mc, upper_mc, alpha=0.3, label=f'{int(ci * 100)}% numerical Fisher CI')
         # --------------------------------------------------------------------------------------------------------------
         # print(f'Starting with the bootstrapping...')
-        # # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
+        # Calculation of the Confidence Interval with bootstrap:--------------------------------------------------------
         # lower_bootstrap, upper_bootstrap = weibull_cr_bootstrap_bounds(xvals=xvals, failures=data['failures'],
         #                                                                     right_censored=data['suspensions'], CI=ci)
         #
         # if lower_bootstrap is not None and upper_bootstrap is not None:
-        #     ax.fill_between(
-        #         xvals,
-        #         lower_bootstrap,
-        #         upper_bootstrap,
-        #         alpha=0.3,
-        #         facecolor='none',
-        #         edgecolor='fuchsia',
-        #         label=f'{int(ci * 100)}% Bootstrapping CI',
-        #         hatch='oo'
-        #     )
-        # # --------------------------------------------------------------------------------------------------------------
+        #     ax.fill_between(xvals, lower_bootstrap, upper_bootstrap, alpha=0.3, facecolor='none', edgecolor='fuchsia', label=f'{int(ci * 100)}% Bootstrapping CI', hatch='oo')
+        # --------------------------------------------------------------------------------------------------------------
 
-    plt.legend(loc='upper left')
+    fig.tight_layout()
+    plt.legend(loc='best')
 
     if save_path:
         plt.savefig(save_path)
@@ -452,6 +517,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None):
     return wb.results
 
 
+# ToDo: AICc and BIC with delta
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
@@ -473,13 +539,13 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
         raise ThresholdError('Not enough failures (more than 2) to perform Weibull in data for "{0}"'.format(part))
 
     # Prevent zeros in the right censored data
-    if any(t == 0 for t in data['suspensions']):
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
         data['suspensions'] = [t for t in data['suspensions'] if t > 0]
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
 
-    if not data['suspensions']:
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
         data['suspensions'] = None
 
     # Weibull Analysis
@@ -557,26 +623,8 @@ def validate_ci(value_str: str, default: float = 0.95):
         return None, "Invalid input, please enter a number (e.g. 0.95)."
 
 
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str):
-    """
-    Determines the best distribution by comparing AICc and BIC winners.
-    If both agree → take that result.
-    If they disagree → fall back to the user's sort_by preference.
-    """
-    df = df.reset_index(drop=True)
-
-    best_aicc = df.at[df['AICc'].idxmin(), 'Distribution']
-    best_bic  = df.at[df['BIC'].idxmin(), 'Distribution']
-
-    if best_aicc == best_bic:
-        return best_aicc
-    else:
-        resolved = df.at[df[sort_by].idxmin(), 'Distribution']
-        print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, using sort_by="{sort_by}" → {resolved}')
-        return resolved
-
-# ToDo: In case a Weibull Mixture is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
-def automated_weibull():
+# ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
+def automated_weibull(save_path=None, return_sf=False):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='BIC')
@@ -586,17 +634,20 @@ def automated_weibull():
 
     part_names_hit = get_parts(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
-    print(f"\n→ Starting analysis for these parts...")
+    print(f"\n→ Starting analysis for {len(part_names_hit)} parts...")
 
     parts_data_fit_all = []
     parts_best_distribution_names = []
 
+    # Internal sort column for FitEverything if user chose CV
+    sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+
     for part in part_names_hit:
-        wb_data_fit_all, wb_best_distribution_name, _ = weibull_fit_best(part=part, sort_by=sort_by)
+        wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
         wb_data_fit_all['PART'] = part
 
-        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
         wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
 
@@ -608,10 +659,10 @@ def automated_weibull():
 
     parts_best_distribution_names = pd.concat(parts_best_distribution_names, ignore_index=True)
 
-    fitter_map = {'Weibull_2P':         lambda p: weibull_2p(part=p, ci=ci, save_path=None),
-                  'Weibull_3P':         lambda p: weibull_3p(part=p, ci=ci, save_path=None),
-                  'Weibull_Mixture':    lambda p: weibull_mixture(part=p, ci=ci, save_path=None),
-                  'Weibull_CR':         lambda p: weibull_cr(part=p, ci=ci, save_path=None)}
+    fitter_map = {'Weibull_2P':         lambda p, sp: weibull_2p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_3P':         lambda p, sp: weibull_3p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_Mixture':    lambda p, sp: weibull_mixture(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_CR':         lambda p, sp: weibull_cr(part=p, ci=ci, save_path=sp, return_sf=return_sf)}
 
     parts_fit_results = {}
 
@@ -629,15 +680,17 @@ def automated_weibull():
                 warnings.warn(f'Unknown distribution "{best_distribution}" for "{part}" --> skipped.', RuntimeWarning)
             continue
 
-        parts_fit_results[part] = fit_function(part)
+        part_save_path = os.path.join(save_path, f'{sort_by}_plot_{part}.png')
 
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(f"\nThis are the results of the automated Weibull analysis:")
-        for part, df in parts_fit_results.items():
-            print(f"\n{'=' * 60}")
-            print(f"  {part}")
-            print(f"{'=' * 60}")
-            print(df.to_string(index=False))
+        parts_fit_results[part] = fit_function(part, part_save_path)
+
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(f"\nThis are the results of the automated Weibull analysis:")
+    #     for part, df in parts_fit_results.items():
+    #         print(f"\n{'=' * 60}")
+    #         print(f"  {part}")
+    #         print(f"{'=' * 60}")
+    #         print(df.to_string(index=False))
 
     return parts_fit_results, parts_data_fit_all
 
@@ -645,7 +698,7 @@ def automated_weibull():
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def manual_weibull(part):
+def manual_weibull(part, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -654,14 +707,14 @@ def manual_weibull(part):
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
-    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
+    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
-    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data),
-                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data),
-                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data=data),
-                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data)}
+    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
+                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
+                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
+                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),}
 
     fit_function = fitter_map.get(compared_best)
 
@@ -679,20 +732,20 @@ def manual_weibull(part):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HIT Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
-def generate_graph_new(part, sort_by='BIC', ci=0.95):
+def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
     buffer = io.BytesIO()   # Save plot in RAM
 
-    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by)
+    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part)
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
 
-    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data),
-                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data),
-                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer, data=data),
-                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=buffer, data=data)}
+    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
+                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
+                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
+                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf)}
 
     fit_function = fitter_map.get(compared_best)
 
@@ -708,40 +761,26 @@ def generate_graph_new(part, sort_by='BIC', ci=0.95):
     return buffer
 
 
-def generate_graph(part):
-    if not part:
-        raise RuntimeError('Invalid request ("part" not specified)')
-
-    data = get_failures_and_suspensions(part)
-
-    # Prepare the response
-    buffer = io.BytesIO()   # buffer to keep the plot in RAM (instead of a file)
-
-    # Weibull Analysis
-    # see https://tvtoglu.github.io/predictr/classes/#default-arguments-and-values for more parameters
-    x = Analysis(df=data['failures'], ds=data['suspensions'],
-            show=False, save=True,
-            fig_size=(9.5, 6),    # (8, 6) -> 800x600
-            unit='days',
-            plot_title='Weibull Probability Plot for {0}'.format(part),
-            path=buffer)
-    x.mle()
-
-    # Send the plot image
-    buffer.seek(0)
-    return buffer
-
-
-
 #***********************************************************************************************************************
 # Start the script local
 #***********************************************************************************************************************
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
+    from Synthetic_Data import load_datasets_from_csv
+
+    # data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_3P_a15000_b1_5_n50_cr0_2_g100.csv', seed=3)
+
+    # print(f'Der Datensatz sieht wie folgt aus: {data_csv[0]}')
+
+    # weibull_3p(part='Synthetic data', data=data_csv[0])
+
+    # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
+
+    parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
 
     # manual_weibull(part='HCCVSWB')
-    # weibull_cr(part='HCCVSEA')
-    weibull_mixture(part='HCCVSWB')
+    # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
+    # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)
 #     # data, _, name = manual_weibull('HCCFISA')
 #     parts_data, data_all = automated_weibull()
 #

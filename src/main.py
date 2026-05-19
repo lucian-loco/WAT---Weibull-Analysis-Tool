@@ -92,7 +92,7 @@ def favicon():
 
 
 @app.route('/weibull', methods=['GET'])
-def route_weibull():
+def route_weibull_plot():
     try:
         part = request.args.get('part')
         graph = weibull.generate_graph(part)
@@ -102,8 +102,19 @@ def route_weibull():
     return send_file(graph, mimetype='image/png')
 
 
-@app.route('/weibull_new', methods=['GET', 'POST'])
-def route_weibull_new():
+@app.route('/weibull_sf', methods=['GET'])
+def route_reliability_plot():
+    try:
+        part = request.args.get('part')
+        graph = weibull.generate_graph(part, return_sf=True)
+    except RuntimeError as e:
+        return 'Weibull plot cannot be generated: ' + str(e), 400
+
+    return send_file(graph, mimetype='image/png')
+
+
+@app.route('/weibull_form', methods=['GET', 'POST'])
+def route_weibull_form():
     part = request.args.get('part')
 
     if not part:
@@ -120,7 +131,7 @@ def route_weibull_new():
 
         if not errors:
             try:
-                graph = weibull.generate_graph_new(part=part, sort_by=sb, ci=ci)
+                graph = weibull.generate_graph(part=part, sort_by=sb, ci=ci)
             except RuntimeError as e:
                 return 'Weibull plot cannot be generated: ' + str(e), 400
 
