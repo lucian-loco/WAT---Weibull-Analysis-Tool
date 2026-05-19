@@ -72,8 +72,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             ic_numeric_winner = best_bic
         else:
             if fallback_col not in ("AICc", "BIC"):
-                raise KeyError(
-                    f"compare_best_distribution: fallback_col='{fallback_col}' not in {{'AICc','BIC'}} for part '{part}'")
+                raise KeyError(f"compare_best_distribution: fallback_col='{fallback_col}' not in {{'AICc','BIC'}} for part '{part}'")
             primary_col = fallback_col
             ic_numeric_winner = df.at[df[primary_col].idxmin(), 'Distribution']
 
@@ -98,19 +97,19 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
         if best_aicc == best_bic:
             # AICc and BIC agree numerically
             if parsimony_changed:
-                print(f'For {part}: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                print(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
                       f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
             else:
-                print(f'For {part}: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                print(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
                       f'and parsimony kept the same model.')
         else:
             # AICc and BIC disagree → we used primary_col as the IC basis
             if parsimony_changed:
-                print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                print(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
                       f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
                       f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
             else:
-                print(f'For {part}: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                print(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
                       f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
                       f'parsimony did not change the winner.')
 
@@ -123,13 +122,13 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
-            cv_results = cross_validate_weibull_models(failures=failures, censored=censored, seed=42, n_folds=5)
+            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5)
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
                 if winner_cv is not None:
                     if winner_cv not in strong_both:
-                        print(f'For {part}: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
+                        print(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
                               f'of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.')
                     return winner_cv
         # If data is None or CV not feasible → fall back
@@ -177,7 +176,7 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     return sorted(allowed)
 
 
-def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5) -> dict:
+def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5) -> dict:
     """
     Stratified K-fold CV on Weibull 2P, 3P, Competing Risk, Mixture.
 
@@ -444,10 +443,10 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     # Feedback: did parsimony change the CV winner?
     parsimony_changed = (final_model != best_name)
     if parsimony_changed:
-        print(f'CV: numeric best (avg NLL) → {best_name}, '
+        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
               f'but Nadeau & Bengio equivalence + parsimony selected simpler model → {final_model}.')
     else:
-        print(f'CV: numeric best (avg NLL) → {best_name}, '
+        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
               f'parsimony (within equivalence group) kept the same model.')
 
     return {"avg_cv_nll": avg_cv_nll,
