@@ -397,9 +397,9 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     best_scores = np.array([s for s in cv_results[best_name] if np.isfinite(s)])
 
     # Bonferroni-Correction
-    alpha = 0.05
-    # n_comparisons = len(valid_models) - 1
-    n_comparisons = 4 - 1
+    alpha = 0.1
+    n_comparisons = len(valid_models) - 1
+    # n_comparisons = 4 - 1
     bonferroni_threshold = alpha / n_comparisons #if n_comparisons > 0 else 1.0
 
     equivalent_group = [best_name]
