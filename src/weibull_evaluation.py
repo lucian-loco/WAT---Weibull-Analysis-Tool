@@ -68,8 +68,8 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
         """
         # 1) Decide primary IC column and numeric IC winner
         if best_aicc == best_bic:
-            primary_col = "AICc"
-            ic_numeric_winner = best_aicc
+            primary_col = "BIC"
+            ic_numeric_winner = best_bic
         else:
             if fallback_col not in ("AICc", "BIC"):
                 raise KeyError(
@@ -225,6 +225,18 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     status_labels = np.concatenate([np.zeros(len(failures), dtype=int), np.ones(len(censored), dtype=int)])
     all_train_data = np.concatenate([failures, censored])
 
+    # Feasibility guard: each class (failures and censored) must have at least n_folds members
+    n_failures = int(np.sum(status_labels == 0))
+    n_censored = int(np.sum(status_labels == 1))
+    min_class_size = min(n_failures, n_censored) if n_censored > 0 else n_failures
+
+    if n_censored > 0 and min_class_size < n_folds:
+        return {"avg_cv_nll": {},
+                "cv_numeric_winner": None,
+                "cv_equivalent_models": [],
+                "cv_parsimonious_winner": None,
+                "cv_has_valid_models": False}
+
     # ------------------------------------------------------------------
     # 1. Early-failure fix (same idea as in run_single_simulation)
     # ------------------------------------------------------------------
@@ -232,11 +244,13 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     early_fail_mask = (status_labels == 0)
     if np.sum(early_fail_mask) >= 1:
         early_sorted = np.argsort(all_train_data[early_fail_mask])[:1]
+        # Find the true indices in all_train_data array
         early_indices = np.where(early_fail_mask)[0][early_sorted]
 
     # ------------------------------------------------------------------
     # 2. Stratified K-Fold
     # ------------------------------------------------------------------
+    # ToDo: Check whether random_state should be fixed or not --> additionally, check whether n_repeats should be at least more than 1
     skf = RepeatedStratifiedKFold(n_splits=n_folds, n_repeats=1, random_state=seed)
 
     model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
@@ -256,10 +270,14 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
 
         # Early failures always in training
         if len(early_indices) > 0:
+            # Check whether early failures are in validation set (not wanted)
             early_in_val = np.isin(early_indices, val_idx)
             if np.any(early_in_val):
+                # Catch the "wrong" indices
                 indices_to_move = early_indices[early_in_val]
+                # Add them to training set
                 train_idx = np.unique(np.concatenate([train_idx, indices_to_move]))
+                # Remove them of validation set
                 val_idx = val_idx[~np.isin(val_idx, indices_to_move)]
 
         fold_data_train = all_train_data[train_idx]
@@ -379,10 +397,11 @@ def cross_validate_weibull_models(failures: np.ndarray, censored: np.ndarray | N
     best_name = min(valid_models, key=lambda m: avg_cv_nll[m])
     best_scores = np.array([s for s in cv_results[best_name] if np.isfinite(s)])
 
+    # Bonferroni-Correction
     alpha = 0.05
-    # ToDo: Check this parameter whether fix like in Davids script
-    n_comparisons = len(valid_models) - 1
-    bonferroni_threshold = alpha / n_comparisons if n_comparisons > 0 else 1.0
+    # n_comparisons = len(valid_models) - 1
+    n_comparisons = 4 - 1
+    bonferroni_threshold = alpha / n_comparisons #if n_comparisons > 0 else 1.0
 
     equivalent_group = [best_name]
 
