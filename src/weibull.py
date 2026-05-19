@@ -187,8 +187,9 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
         plot_settings_sf(xmax=xmax_new)
-        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
+        fig = plt.gcf()
         fig.tight_layout()
+        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
 
     if save_path:
         plt.savefig(save_path)
@@ -257,8 +258,9 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
         plot_settings_sf(xmax=xmax_new)
-        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
+        fig = plt.gcf()
         fig.tight_layout()
+        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
 
     if save_path:
         plt.savefig(save_path)
@@ -603,7 +605,7 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 def validate_sort_by(value_str: str, default: str = 'BIC'):
-    valid = ['AICc', 'BIC']
+    valid = ['AICc', 'BIC', 'CV']
     if value_str.strip() == "":
         return default, None
     if value_str in valid:
