@@ -659,10 +659,10 @@ def automated_weibull(save_path=None, return_sf=False):
 
     parts_best_distribution_names = pd.concat(parts_best_distribution_names, ignore_index=True)
 
-    fitter_map = {'Weibull_2P':         lambda p, sp: weibull_2p(part=p, ci=ci, save_path=sp, data=data, return_sf=return_sf),
-                  'Weibull_3P':         lambda p, sp: weibull_3p(part=p, ci=ci, save_path=sp, data=data, return_sf=return_sf),
-                  'Weibull_Mixture':    lambda p, sp: weibull_mixture(part=p, ci=ci, save_path=sp, data=data, return_sf=return_sf),
-                  'Weibull_CR':         lambda p, sp: weibull_cr(part=p, ci=ci, save_path=sp, data=data, return_sf=return_sf)}
+    fitter_map = {'Weibull_2P':         lambda p, sp: weibull_2p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_3P':         lambda p, sp: weibull_3p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_Mixture':    lambda p, sp: weibull_mixture(part=p, ci=ci, save_path=sp, return_sf=return_sf),
+                  'Weibull_CR':         lambda p, sp: weibull_cr(part=p, ci=ci, save_path=sp, return_sf=return_sf)}
 
     parts_fit_results = {}
 
@@ -684,13 +684,13 @@ def automated_weibull(save_path=None, return_sf=False):
 
         parts_fit_results[part] = fit_function(part, part_save_path)
 
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(f"\nThis are the results of the automated Weibull analysis:")
-        for part, df in parts_fit_results.items():
-            print(f"\n{'=' * 60}")
-            print(f"  {part}")
-            print(f"{'=' * 60}")
-            print(df.to_string(index=False))
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(f"\nThis are the results of the automated Weibull analysis:")
+    #     for part, df in parts_fit_results.items():
+    #         print(f"\n{'=' * 60}")
+    #         print(f"  {part}")
+    #         print(f"{'=' * 60}")
+    #         print(df.to_string(index=False))
 
     return parts_fit_results, parts_data_fit_all
 
@@ -776,7 +776,7 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
-    # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
+    parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
 
     # manual_weibull(part='HCCVSWB')
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
