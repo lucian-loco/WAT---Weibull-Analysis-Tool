@@ -1,14 +1,14 @@
 #!/usr/bin/python3
 import numpy as np
 import pandas as pd
-from scipy import stats
+# from scipy import stats
 from utils import DataError, ThresholdError, NoCacheError
 from sklearn.model_selection import RepeatedStratifiedKFold
 from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture
 
 
-
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC'):
+# ToDo: Tune the delta factor
+def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.1):
     """
     Central model selection.
 
@@ -122,7 +122,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
-            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5)
+            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta)
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
@@ -176,7 +176,7 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     return sorted(allowed)
 
 
-def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5) -> dict:
+def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 3, delta: float = 0.1) -> dict:
     """
     Stratified K-fold CV on Weibull 2P, 3P, Competing Risk, Mixture.
 
@@ -200,6 +200,8 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     if n_fail < 2:
         # No model is feasible
         return {"avg_cv_nll": {},
+                "std_cv_nll": {},
+                "se_cv_nll": {},
                 "cv_numeric_winner": None,
                 "cv_equivalent_models": [],
                 "cv_parsimonious_winner": None,
@@ -231,6 +233,8 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
 
     if n_censored > 0 and min_class_size < n_folds:
         return {"avg_cv_nll": {},
+                "std_cv_nll": {},
+                "se_cv_nll": {},
                 "cv_numeric_winner": None,
                 "cv_equivalent_models": [],
                 "cv_parsimonious_winner": None,
@@ -250,7 +254,7 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # 2. Stratified K-Fold
     # ------------------------------------------------------------------
     # ToDo: Check whether random_state should be fixed or not --> additionally, check whether n_repeats should be at least more than 1
-    skf = RepeatedStratifiedKFold(n_splits=n_folds, n_repeats=1, random_state=seed)
+    skf = RepeatedStratifiedKFold(n_splits=n_folds, n_repeats=n_repeats, random_state=seed)
 
     model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
     cv_results = {name: [] for name in model_names}
@@ -370,6 +374,7 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # ------------------------------------------------------------------
     avg_cv_nll = {}
     std_cv_nll = {}
+    se_cv_nll = {}
     valid_models = []
 
     for name, scores in cv_results.items():
@@ -377,9 +382,11 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
         if len(finite_scores) == 0:
             avg_cv_nll[name] = float("inf")
             std_cv_nll[name] = float("nan")
+            se_cv_nll[name] = float("nan")
         else:
             avg_cv_nll[name] = float(np.mean(finite_scores))
             std_cv_nll[name] = float(np.std(finite_scores, ddof=1)) if len(finite_scores) > 1 else float("nan")
+            se_cv_nll[name] = float(np.std(finite_scores, ddof=1) / np.sqrt(len(finite_scores))) if len(finite_scores) > 1 else float("nan")
             # Only models that are globally allowed and have at least one finite score
             if name in globally_allowed:
                 valid_models.append(name)
@@ -387,6 +394,8 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     if len(valid_models) == 0:
         # None of the models had usable CV scores → CV not feasible
         return {"avg_cv_nll": avg_cv_nll,
+                "std_cv_nll": std_cv_nll,
+                "se_cv_nll": se_cv_nll,
                 "cv_numeric_winner": None,
                 "cv_equivalent_models": [],
                 "cv_parsimonious_winner": None,
@@ -394,44 +403,53 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
 
     # numeric winner among valid models
     best_name = min(valid_models, key=lambda m: avg_cv_nll[m])
-    best_scores = np.array([s for s in cv_results[best_name] if np.isfinite(s)])
 
-    # Bonferroni-Correction
-    alpha = 0.1
-    n_comparisons = len(valid_models) - 1
-    # n_comparisons = 4 - 1
-    bonferroni_threshold = alpha / n_comparisons #if n_comparisons > 0 else 1.0
+    # Approach with delta on NLL
+    best_nll = avg_cv_nll[best_name]
 
-    equivalent_group = [best_name]
+    equivalent_group = [m for m in valid_models if avg_cv_nll[m] - best_nll <= delta]
 
-    for model_name in valid_models:
-        if model_name == best_name:
-            continue
-
-        model_scores = np.array([s for s in cv_results[model_name] if np.isfinite(s)])
-        n_total = min(len(best_scores), len(model_scores))
-        if n_total < 2:
-            # Not enough paired scores to compare
-            continue
-
-        diffs = model_scores[:n_total] - best_scores[:n_total]
-
-        n_k = n_folds
-        var_diff = np.var(diffs, ddof=1)
-        rho = 1 / (n_k - 1)
-        correction_factor = (1 / n_total) + rho
-        standard_error = np.sqrt(correction_factor * var_diff)
-
-        if standard_error == 0:
-            t_stat = 0.0
-        else:
-            t_stat = np.mean(diffs) / standard_error
-
-        df = n_k - 1
-        p_val = stats.t.sf(np.abs(t_stat), df) * 2
-
-        if p_val >= bonferroni_threshold:
-            equivalent_group.append(model_name)
+    # t-test: significance check to apply parsimony --> too hard, old state ********************************************
+    # best_scores = np.array([s for s in cv_results[best_name] if np.isfinite(s)])
+    #
+    # # Bonferroni-Correction
+    # alpha = 0.1
+    # n_comparisons = len(valid_models) - 1
+    # # n_comparisons = 4 - 1
+    # bonferroni_threshold = alpha / n_comparisons #if n_comparisons > 0 else 1.0
+    #
+    # equivalent_group = [best_name]
+    #
+    # for model_name in valid_models:
+    #     if model_name == best_name:
+    #         continue
+    #
+    #     model_scores = np.array([s for s in cv_results[model_name] if np.isfinite(s)])
+    #     n_total = min(len(best_scores), len(model_scores))
+    #     if n_total < 2:
+    #         # Not enough paired scores to compare
+    #         continue
+    #
+    #     diffs = model_scores[:n_total] - best_scores[:n_total]
+    #
+    #     # Nadeau & Bengio correction
+    #     n_k = n_folds * n_repeats
+    #     var_diff = np.var(diffs, ddof=1)
+    #     rho = 1 / (n_k - 1)
+    #     correction_factor = (1 / n_total) + rho
+    #     standard_error = np.sqrt(correction_factor * var_diff)
+    #
+    #     if standard_error == 0:
+    #         t_stat = 0.0
+    #     else:
+    #         t_stat = np.mean(diffs) / standard_error
+    #
+    #     df = n_k - 1
+    #     p_val = stats.t.sf(np.abs(t_stat), df) * 2
+    #
+    #     if p_val >= bonferroni_threshold:
+    #         equivalent_group.append(model_name)
+    # ******************************************************************************************************************
 
     complexity = {"Weibull_2P": 2,
                   "Weibull_3P": 3,
@@ -443,13 +461,19 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # Feedback: did parsimony change the CV winner?
     parsimony_changed = (final_model != best_name)
     if parsimony_changed:
-        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
-              f'but Nadeau & Bengio equivalence + parsimony selected simpler model → {final_model}.')
+        # print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
+        #       f'but Nadeau & Bengio equivalence + parsimony selected simpler model → {final_model}.')
+        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
+              f'but delta≤{delta} equivalence + parsimony selected simpler model → {final_model}.')
     else:
-        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
-              f'parsimony (within equivalence group) kept the same model.')
+        # print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
+        #       f'parsimony (within equivalence group) kept the same model.')
+        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
+              f'parsimony kept the same model.')
 
     return {"avg_cv_nll": avg_cv_nll,
+            "std_cv_nll": std_cv_nll,
+            "se_cv_nll": se_cv_nll,
             "cv_numeric_winner": best_name,
             "cv_equivalent_models": equivalent_group,
             "cv_parsimonious_winner": final_model,
