@@ -626,7 +626,7 @@ def validate_ci(value_str: str, default: float = 0.95):
 
 
 # ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
-def automated_weibull(save_path=None, return_sf=False):
+def automated_weibull(save_path=None, return_sf=False, delta=0.1):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='BIC')
@@ -649,7 +649,7 @@ def automated_weibull(save_path=None, return_sf=False):
 
         wb_data_fit_all['PART'] = part
 
-        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
+        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
 
         wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
 
@@ -700,7 +700,7 @@ def automated_weibull(save_path=None, return_sf=False):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def manual_weibull(part, return_sf=False):
+def manual_weibull(part, return_sf=False, delta=0.1):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -711,7 +711,7 @@ def manual_weibull(part, return_sf=False):
 
     wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
@@ -742,7 +742,7 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 
     wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC')
+    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
