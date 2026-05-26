@@ -21,6 +21,8 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import LogLocator, FuncFormatter, MultipleLocator
 from utils import get_logger
@@ -44,6 +46,16 @@ def make_minor_label_formatter(decade_span):
             return f'$5 \\times 10^{{{int(log)}}}$'
         return ''
     return _minor_label_formatter
+
+
+def sci_formatter(x, pos):
+    if x == 0:
+        return '0'
+    exp = int(np.floor(np.log10(abs(x))))
+    coeff = x / 10**exp
+    if abs(coeff - 1.0) < 0.01:
+        return f'$10^{{{exp}}}$'
+    return f'${coeff:.4g}\\times10^{{{exp}}}$'
 
 
 def plot_settings(fit, upper_quantile=0.999):
@@ -102,9 +114,6 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
 
 
 def plot_settings_sf(xmax):
-    fig = plt.gcf()
-    fig.set_size_inches(9.5, 6)
-
     ax = plt.gca()
     ax.set_xlabel('Time in days')
     ax.set_ylabel('Reliability / survival probability')
@@ -115,6 +124,12 @@ def plot_settings_sf(xmax):
     ax.set_axisbelow(True)
     ax.set_ylim(0, 1.05)
     ax.set_xlim(0, xmax)
+
+    ax.xaxis.set_major_formatter(FuncFormatter(sci_formatter))
+
+    fig = plt.gcf()
+    fig.set_size_inches(9.5, 6)
+    fig.tight_layout()
 
     # Cache timestamp box
     ts = get_cache_timestamp()
@@ -186,10 +201,8 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plot_settings_sf(xmax=xmax_new)
-        fig = plt.gcf()
-        fig.tight_layout()
         plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
+        plot_settings_sf(xmax=xmax_new)
 
     if save_path:
         plt.savefig(save_path)
@@ -257,10 +270,8 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plot_settings_sf(xmax=xmax_new)
-        fig = plt.gcf()
-        fig.tight_layout()
         plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
+        plot_settings_sf(xmax=xmax_new)
 
     if save_path:
         plt.savefig(save_path)
@@ -344,13 +355,13 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
+        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
         ax = plot_settings_sf(xmax=xmax_rel)
         lines = ax.get_lines()
         # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
         lines[-3].set_color('C2')  # Green for component 1
         lines[-2].set_color('C1')  # Orange for component 2
         lines[-1].set_color('C0')  # Blue for mixture
-        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
 
     if ci_mc != 0.0:
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
@@ -383,7 +394,6 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
         #     ax.fill_between(xvals, lower_bootstrap, upper_bootstrap, alpha=0.3, facecolor='none', edgecolor='fuchsia', label=f'{int(ci * 100)}% Bootstrapping CI', hatch='oo')
         # --------------------------------------------------------------------------------------------------------------
 
-    fig.tight_layout()
     plt.legend(loc='best')
 
     if save_path:
@@ -468,13 +478,13 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
+        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
         ax = plot_settings_sf(xmax=xmax_rel)
         lines = ax.get_lines()
         # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
         lines[-3].set_color('C2')  # Green for component 1
         lines[-2].set_color('C1')  # Orange for component 2
         lines[-1].set_color('C0')  # Blue for mixture
-        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
 
     if ci_mc != 0.0:
         # Calculation of the Confidence Interval analytically:----------------------------------------------------------
@@ -506,7 +516,6 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
         #     ax.fill_between(xvals, lower_bootstrap, upper_bootstrap, alpha=0.3, facecolor='none', edgecolor='fuchsia', label=f'{int(ci * 100)}% Bootstrapping CI', hatch='oo')
         # --------------------------------------------------------------------------------------------------------------
 
-    fig.tight_layout()
     plt.legend(loc='best')
 
     if save_path:
@@ -519,7 +528,6 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
     return wb.results
 
 
-# ToDo: AICc and BIC with delta
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
@@ -604,27 +612,6 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def validate_sort_by(value_str: str, default: str = 'BIC'):
-    valid = ['AICc', 'BIC', 'CV']
-    if value_str.strip() == "":
-        return default, None
-    if value_str in valid:
-        return value_str, None
-    return None, f"Invalid input, please enter one of {valid}."
-
-
-def validate_ci(value_str: str, default: float = 0.95):
-    if value_str.strip() == "":
-        return default, None
-    try:
-        v = float(value_str)
-        if 0 <= v < 1:
-            return v, None
-        return None, "Please enter a value strictly between 0 and 1 or 0 for no confidence interval."
-    except ValueError:
-        return None, "Invalid input, please enter a number (e.g. 0.95)."
-
-
 # ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
 def automated_weibull(save_path=None, return_sf=False, delta=0.1):
     failure_threshold = ask_threshold("Failure threshold", default=4)
@@ -778,9 +765,9 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
-    parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
+    # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
 
-    # manual_weibull(part='HCCVSWB')
+    manual_weibull(part='HCCTRV')
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
     # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)
 #     # data, _, name = manual_weibull('HCCFISA')
