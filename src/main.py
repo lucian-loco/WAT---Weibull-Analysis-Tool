@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import utils
 import weibull
 import crate
 import layout
@@ -123,15 +124,22 @@ def route_weibull_form():
     errors = {}
 
     if request.method == 'POST':
-        sb, err = weibull.validate_sort_by(request.form.get('sort_by', ''))
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
         if err: errors['sort_by'] = err
 
-        ci, err = weibull.validate_ci(request.form.get('ci', ''))
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
         if err: errors['ci'] = err
 
+        plot_type, err = utils.validate_type(request.form.get('plot_type', ''))
+        if err: errors['plot_type'] = err
+
         if not errors:
+            if plot_type == 'CDF':
+                return_sf = False
+            else:
+                return_sf = True
             try:
-                graph = weibull.generate_graph(part=part, sort_by=sb, ci=ci)
+                graph = weibull.generate_graph(part=part, sort_by=sb, ci=ci, return_sf=return_sf)
             except RuntimeError as e:
                 return 'Weibull plot cannot be generated: ' + str(e), 400
 
