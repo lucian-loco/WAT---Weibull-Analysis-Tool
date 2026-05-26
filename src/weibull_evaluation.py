@@ -8,6 +8,7 @@ from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, 
 
 
 # ToDo: Tune the delta factor
+# ToDo: Make the feedback messages passing upwards for the webtool in the end!
 def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.1):
     """
     Central model selection.
@@ -129,9 +130,17 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                 if winner_cv is not None:
                     if winner_cv not in strong_both:
                         print(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
-                              f'of AICc/BIC (ΔAICc/BIC ≥ 2). Please check the fit carefully.')
+                              f'of AICc and BIC (ΔAICc / ΔBIC ≥ 2). Please check the fit carefully.')
                     return winner_cv
-        # If data is None or CV not feasible → fall back
+                else:
+                    # If data is None or CV not feasible → fall back
+                    print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but returned no parsimonious winner.')
+            else:
+                print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but no model had finite avg NLL '
+                      f'(all models infeasible or all folds failed).')
+        else:
+            print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: no raw data provided (data=None).')
+
         return _select_by_ic(ic_fallback)
 
     else:
@@ -253,7 +262,6 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # ------------------------------------------------------------------
     # 2. Stratified K-Fold
     # ------------------------------------------------------------------
-    # ToDo: Check whether random_state should be fixed or not --> additionally, check whether n_repeats should be at least more than 1
     skf = RepeatedStratifiedKFold(n_splits=n_folds, n_repeats=n_repeats, random_state=seed)
 
     model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
