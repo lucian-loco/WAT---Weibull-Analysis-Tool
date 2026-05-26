@@ -24,7 +24,7 @@ failure_threshold_global = 4
 
 
 
-REQUIRED_COLUMNS = ['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']
+REQUIRED_COLUMNS = ['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE', 'FULL_RUNNING_TIME']
 
 
 def _validate_thresholds(failure_threshold, distinct_threshold):
@@ -58,14 +58,15 @@ def _normalize_weibull_df(df):
     df['CURRENT_STATE'] = df['CURRENT_STATE'].astype(str).str.strip().str.upper()
 
     df['RUNNING_TIME'] = pd.to_numeric(df['RUNNING_TIME'], errors='coerce')
+    df['FULL_RUNNING_TIME'] = pd.to_numeric(df['FULL_RUNNING_TIME'], errors='coerce')
     df['FAILURE_DATE'] = pd.to_datetime(df['FAILURE_DATE'], errors='coerce')
 
     invalid_status = set(df['STATUS'].dropna().unique()) - {'F', 'S'}
     if invalid_status:
         raise DataError(f'Unknown STATUS values found: {sorted(invalid_status)}')
 
-    df = df.dropna(subset=['RUNNING_TIME'])
-    df = df[df['RUNNING_TIME'] >= 0].copy()
+    df = df.dropna(subset=['RUNNING_TIME', 'FULL_RUNNING_TIME'])
+    df = df[(df['RUNNING_TIME'] >= 0) & (df['FULL_RUNNING_TIME'] >= 0)].copy()
 
     return df
 
@@ -78,7 +79,7 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
 
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE
     with db_hitdata.get_cursor() as cursor:
-        sql_query = """SELECT w.PART, w.ASSET_ID, w.RUNNING_TIME, w.STATUS, w.FAILURE_DATE, w.CURRENT_STATE FROM weibull_data w
+        sql_query = """SELECT w.PART, w.ASSET_ID, w.RUNNING_TIME, w.STATUS, w.FAILURE_DATE, w.CURRENT_STATE, w.FULL_RUNNING_TIME FROM weibull_data w
                             JOIN (
                                 SELECT PART FROM weibull_data 
                                 WHERE STATUS = 'F'
@@ -105,15 +106,10 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
 
 
 def get_data(part):
-    failures = []
-    suspensions = []
-    irp_dates = []
-    current_state = []
-
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE,CURRENT_STATE
     # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
     with db_hitdata.get_cursor() as cursor:
-        sql_query = ("""SELECT PART, ASSET_ID, RUNNING_TIME, STATUS, FAILURE_DATE, CURRENT_STATE FROM weibull_data
+        sql_query = ("""SELECT PART, ASSET_ID, RUNNING_TIME, STATUS, FAILURE_DATE, CURRENT_STATE, FULL_RUNNING_TIME FROM weibull_data
                         WHERE PART = :part_id
                         ORDER BY ASSET_ID, STATUS, FAILURE_DATE""")
         result = cursor.execute(sql_query, {"part_id": part})
@@ -265,8 +261,8 @@ def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_
             weibull_lists[p] = {'failures': failure_df['RUNNING_TIME'].tolist(),
                                 'suspensions': suspension_df['RUNNING_TIME'].tolist(),
                                 'IRP_dates': failure_df['FAILURE_DATE'].tolist(),
-                                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE']].to_dict('records'),
-                                'all_assets': df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']].to_dict('records')}
+                                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records'),
+                                'all_assets': df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records')}
 
             return weibull_lists
     else:
@@ -282,5 +278,5 @@ def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_
         return {'failures': failure_df['RUNNING_TIME'].tolist(),
                 'suspensions': suspension_df['RUNNING_TIME'].tolist(),
                 'IRP_dates': failure_df['FAILURE_DATE'].tolist(),
-                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE']].to_dict('records'),
-                'all_assets': part_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']].to_dict('records')}
+                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records'),
+                'all_assets': part_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records')}
