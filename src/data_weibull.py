@@ -5,7 +5,6 @@ import db_hitdata
 import threading
 import warnings
 import os
-import time
 import datetime
 from zoneinfo import ZoneInfo
 from utils import get_logger
@@ -25,20 +24,55 @@ failure_threshold_global = 4
 
 
 
-def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=2):
-    # Only parts with failures more than the failure_threshold will be considered
+REQUIRED_COLUMNS = ['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']
+
+
+def _validate_thresholds(failure_threshold, distinct_threshold):
     if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
-        raise ThresholdError(f'Invalid failure threshold "{failure_threshold}", needs to be an integer and greater than or equal as 1')
+        raise ThresholdError(f'Invalid failure threshold "{failure_threshold}", needs to be an integer and >= 1')
 
     if not (isinstance(distinct_threshold, int) and distinct_threshold >= 1):
-        raise ThresholdError(f'Invalid distinct failure threshold "{distinct_threshold}", needs to be an integer and greater than or equal as 1')
+        raise ThresholdError(f'Invalid distinct failure threshold "{distinct_threshold}", needs to be an integer and >= 1')
 
-    if distinct_threshold < 2:  # For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
-        raise ThresholdError(f'Requested less than 2 distinct failure times. Weibull Analysis not possible.')
-    elif failure_threshold < 4:
+    if distinct_threshold < 2:
+        raise ThresholdError('Requested less than 2 distinct failure times. Weibull Analysis not possible.')
+
+    if failure_threshold < 4:
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn('Requested less than 4 failures in total! The results should not be trusted.', UserWarning)
+
+
+def _normalize_weibull_df(df):
+    if df.empty:
+        return df
+
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise DataError(f'Missing required columns in Weibull data: {missing}')
+
+    df = df.copy()
+    df['PART'] = df['PART'].astype(str).str.strip()
+    df['ASSET_ID'] = df['ASSET_ID'].astype(str).str.strip()
+    df['STATUS'] = df['STATUS'].astype(str).str.strip().str.upper()
+    df['CURRENT_STATE'] = df['CURRENT_STATE'].astype(str).str.strip().str.upper()
+
+    df['RUNNING_TIME'] = pd.to_numeric(df['RUNNING_TIME'], errors='coerce')
+    df['FAILURE_DATE'] = pd.to_datetime(df['FAILURE_DATE'], errors='coerce')
+
+    invalid_status = set(df['STATUS'].dropna().unique()) - {'F', 'S'}
+    if invalid_status:
+        raise DataError(f'Unknown STATUS values found: {sorted(invalid_status)}')
+
+    df = df.dropna(subset=['RUNNING_TIME'])
+    df = df[df['RUNNING_TIME'] >= 0].copy()
+
+    return df
+
+
+def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=2):
+    # Only parts with failures more than the failure_threshold and the distinct_threshold will be considered
+    _validate_thresholds(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
     data = []
 
@@ -58,10 +92,10 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
         for row in result:
             data.append(row)
 
-    weibull_data = pd.DataFrame(data, columns=['PART', 'ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE'])
+    weibull_data = _normalize_weibull_df(pd.DataFrame(data, columns=REQUIRED_COLUMNS))
 
-    if weibull_data.shape[0] == 0:
-        raise DataError(f'No parts found with more than {failure_threshold} failures and {distinct_threshold} distinct failures')
+    if weibull_data.empty:
+        raise DataError(f'No parts found with more than {failure_threshold} failures and {distinct_threshold} distinct failure times.')
 
     print(f'Number of assets found: {weibull_data.shape[0]}')
 
@@ -79,41 +113,46 @@ def get_data(part):
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE,CURRENT_STATE
     # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
     with db_hitdata.get_cursor() as cursor:
-        sql_query = "SELECT RUNNING_TIME, STATUS, FAILURE_DATE, CURRENT_STATE FROM weibull_data WHERE PART = :part_id"
+        sql_query = ("""SELECT PART, ASSET_ID, RUNNING_TIME, STATUS, FAILURE_DATE, CURRENT_STATE FROM weibull_data
+                        WHERE PART = :part_id
+                        ORDER BY ASSET_ID, STATUS, FAILURE_DATE""")
         result = cursor.execute(sql_query, {"part_id": part})
+        rows = list(result)
 
-        for row in result:
-            if row[1] == 'S':
-                suspensions.append(int(row[0]))
-                current_state.append(str(row[3]))
-            elif row[1] == 'F':
-                failures.append(int(row[0]))
-                irp_dates.append(str(row[2]))
-                current_state.append(str(row[3]))
-            else:
-                raise DataError('Unknown status "{0}"'.format(row[1]))
+    df = _normalize_weibull_df(pd.DataFrame(rows, columns=REQUIRED_COLUMNS))
+
+    if df.empty:
+        raise DataError(f'No data found for "{part}"')
+
+    failure_df = df[df['STATUS'] == 'F'].copy()
+    suspension_df = df[df['STATUS'] == 'S'].copy()
 
 #Todo limit of the minimum failures and minimum distinct failures need to be adjusted | insert rule whether even with 2 distinct failures but many failure times at this times --> no good data
+    if len(failure_df) < 2:
+        raise DataError(f'Not enough failures (more than 2) in data for "{part}".')
 
-    if len(failures) < 2:
-        raise DataError('Not enough failures (more than 2) in data for "{0}"'.format(part))
-    elif len(set(failures)) < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
-        raise DataError('Not enough distinct failures (more than 2) in data for "{0}"'.format(part))
-    elif len(failures) < 4:
+    if failure_df['RUNNING_TIME'].nunique() < 2: #For Weibull Mixture at least 5 distinct failure times for 2 subdistributions
+        raise DataError(f'Not enough distinct failures (more than 2) in data for "{part}"')
+
+    if len(failure_df) < 4:
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
             warnings.warn(f'Less than 4 failures in total for "{part}"! The results should not be trusted.', UserWarning)
 
-    return {'failures': failures, 'suspensions': suspensions, 'IRP_dates': irp_dates, 'current_state': current_state}
+    installed_df = df[df['CURRENT_STATE'] == 'I'].copy()
+
+    return {'part': part,
+            'all_assets': df.reset_index(drop=True),
+            'installed_assets': installed_df.reset_index(drop=True),
+            'failures': failure_df['RUNNING_TIME'].tolist(),
+            'suspensions': suspension_df['RUNNING_TIME'].tolist(),
+            'IRP_dates': failure_df['FAILURE_DATE'].tolist()
+            }
 
 
-def get_parts(failure_threshold=4, distinct_threshold=2):
+def get_parts(failure_threshold=failure_threshold_global, distinct_threshold=2):
     # Only parts with failures more than the failure_threshold will be considered
-    if not (isinstance(failure_threshold, int) and failure_threshold >= 1):
-        raise ThresholdError('Invalid failure threshold "{0}", needs to be an integer and greater than or equal as 1'.format(failure_threshold))
-
-    if not (isinstance(distinct_threshold, int) and distinct_threshold >= 1):
-        raise ThresholdError('Invalid distinct failure threshold "{0}", needs to be an integer and greater than or equal as 1'.format(distinct_threshold))
+    _validate_thresholds(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
     part_names = []
 
@@ -139,7 +178,7 @@ def get_parts(failure_threshold=4, distinct_threshold=2):
     return part_names
 
 
-# ToDo: Process the data further to capture failures and suspensions
+# ToDo: Process the data further to capture failures and suspensions and current states of the new data as well
 # Get data for the Weibull Analysis out of local .csv files
 def get_csv_data(query='above 3'):
     base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull-Data_before-cleaning-Christine"
@@ -210,7 +249,6 @@ def _get_cached_or_direct_data(part=None):
             return get_all_data()
 
 
-# ToDo: Include the current state for these functions to make it available
 def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_global):
     # This exception is needed since the return of data_weibull.get_parts() is already formatted correctly
     if not weibull_cache_enabled and part is not None:
@@ -218,30 +256,32 @@ def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_
 
     data = _get_cached_or_direct_data(part=part)
 
-    if part is not None:
+    if part is None:
+        weibull_lists = {}
+        for p, df in data.items():
+            failure_df = df[df['STATUS'] == 'F'].copy()
+            suspension_df = df[df['STATUS'] == 'S'].copy()
+            installed_df = df[df['CURRENT_STATE'] == 'I'].copy()
+
+            weibull_lists[p] = {'failures': failure_df['RUNNING_TIME'].tolist(),
+                                'suspensions': suspension_df['RUNNING_TIME'].tolist(),
+                                'IRP_dates': failure_df['FAILURE_DATE'].tolist(),
+                                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE']].to_dict('records'),
+                                'all_assets': df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']].to_dict('records')}
+
+            return weibull_lists
+    else:
         if part not in data:
             raise DataError(f'Part {part} not found in data. Probably there were too few failures. '
                             f'Data contains only parts with more than {failure_threshold} failures.')
 
-        part_df = data[part]
-        return {'failures': part_df[part_df['STATUS'] == 'F']['RUNNING_TIME'].tolist(),
-                'suspensions': part_df[part_df['STATUS'] == 'S']['RUNNING_TIME'].tolist(),
-                'IRP_dates': part_df[part_df['STATUS'] == 'F']['FAILURE_DATE'].tolist()}
+        part_df = data[part].copy()
+        failure_df = part_df[part_df['STATUS'] == 'F'].copy()
+        suspension_df = part_df[part_df['STATUS'] == 'S'].copy()
+        installed_df = part_df[part_df['CURRENT_STATE'] == 'I'].copy()
 
-    else:
-        weibull_lists = {}
-        for p, df in data.items():
-            failure_df = df[df['STATUS'] == 'F']
-            suspension_df = df[df['STATUS'] == 'S']
-            weibull_lists[p] = {'failures': failure_df['RUNNING_TIME'].tolist(),
-                                'suspensions': suspension_df['RUNNING_TIME'].tolist(),
-                                'IRP_dates': failure_df['FAILURE_DATE'].tolist()}
-
-        return weibull_lists
-
-
-
-if __name__ == '__main__':
-    start = time.time()
-    print(get_all_data())
-    print(f'{time.time() - start} seconds to complete get_all_data()')
+        return {'failures': failure_df['RUNNING_TIME'].tolist(),
+                'suspensions': suspension_df['RUNNING_TIME'].tolist(),
+                'IRP_dates': failure_df['FAILURE_DATE'].tolist(),
+                'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE']].to_dict('records'),
+                'all_assets': part_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE']].to_dict('records')}
