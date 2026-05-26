@@ -145,7 +145,7 @@ def route_weibull_form():
 
             return send_file(graph, mimetype='image/png')
 
-    return render_template('weibull_form.html', part=part, errors=errors, defaults={'sort_by': 'BIC', 'ci': 0.95})
+    return render_template('weibull_form.html', part=part, errors=errors, defaults={'plot_type': 'Failure Probability', 'sort_by': 'CV', 'ci': 0.95})
 
 
 @app.route('/crate/new')
