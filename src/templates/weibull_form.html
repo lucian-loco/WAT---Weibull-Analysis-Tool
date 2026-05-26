@@ -35,12 +35,13 @@
     <h2>Weibull Analysis for: <code>{{ part }}</code></h2>
 
     {# part is kept as URL parameter so it is available in the POST request #}
-    <form action="/weibull_new?part={{ part }}" method="post">
+    <form action="/weibull_form?part={{ part }}" method="post">
 
         <label for="sort_by">Selection method</label>
         <select id="sort_by" name="sort_by">
             <option value="BIC"  {% if defaults.sort_by == 'BIC'  %}selected{% endif %}>BIC</option>
             <option value="AICc" {% if defaults.sort_by == 'AICc' %}selected{% endif %}>AICc</option>
+            <option value="CV"   {% if defaults.sort_by == 'CV' %}selected{% endif %}>CV</option>
         </select>
         {% if errors.sort_by %}
             <span class="error"> → {{ errors.sort_by }}</span>
