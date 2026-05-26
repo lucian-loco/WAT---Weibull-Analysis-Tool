@@ -122,7 +122,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
-            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta)
+            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=1, delta=delta)
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
@@ -176,7 +176,7 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     return sorted(allowed)
 
 
-def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 3, delta: float = 0.1) -> dict:
+def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.1) -> dict:
     """
     Stratified K-fold CV on Weibull 2P, 3P, Competing Risk, Mixture.
 
