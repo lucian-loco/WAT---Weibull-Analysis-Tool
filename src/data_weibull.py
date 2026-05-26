@@ -127,7 +127,6 @@ def get_data(part):
     failure_df = df[df['STATUS'] == 'F'].copy()
     suspension_df = df[df['STATUS'] == 'S'].copy()
 
-#Todo limit of the minimum failures and minimum distinct failures need to be adjusted | insert rule whether even with 2 distinct failures but many failure times at this times --> no good data
     if len(failure_df) < 2:
         raise DataError(f'Not enough failures (more than 2) in data for "{part}".')
 
