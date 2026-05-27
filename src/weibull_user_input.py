@@ -57,3 +57,30 @@ def ask_ci(default: float = 0.95):
                 print("  → Please enter a value strictly between 0 and 1 or 0 for no confidence interval.")
         except ValueError:
             print("  → Invalid input, please enter a number (e.g. 0.95).")
+
+
+def ask_deltas(default: list = None):
+    """
+    Asks the user to enter comma-separated future time deltas in days.
+    Validates that all values are positive numbers.
+    Returns a list of floats.
+    """
+    if default is None:
+        default = [90.0, 180.0, 365.0]
+    default_str = ','.join(str(int(d) if d == int(d) else d) for d in default)
+    while True:
+        user_input = input(f"Enter comma-separated future time deltas in days and press enter (Default: {default_str}): ").strip()
+        if user_input == "":
+            print(f"Default ({default_str}) will be used.")
+            return default
+        try:
+            values = [float(x.strip()) for x in user_input.split(',')]
+            if not values:
+                print(" → Please enter at least one value.")
+                continue
+            if any(v <= 0 for v in values):
+                print(" → All delta values must be positive numbers greater than 0.")
+                continue
+            return values
+        except ValueError:
+            print(" → Invalid input, please enter comma-separated numbers (e.g. 90,180,365).")

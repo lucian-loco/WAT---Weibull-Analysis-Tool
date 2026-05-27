@@ -538,18 +538,12 @@ def print_forecast(forecast, CI=0.95):
 # CLI
 # ----------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-    from weibull_user_input import ask_sort_by, ask_ci
+    from weibull_user_input import ask_sort_by, ask_ci, ask_deltas
 
     part = input('Enter part name: ').strip()
     sort_by = ask_sort_by(default='CV')
     ci = ask_ci(default=0.95)
-
-    delta_input = input('Enter comma-separated future time deltas in days (default: 90,180,365): ').strip()
-
-    if delta_input:
-        deltas = [float(x.strip()) for x in delta_input.split(',')]
-    else:
-        deltas = [90.0, 180.0, 365.0]
+    deltas = ask_deltas(default=[90.0, 180.0, 365.0])
 
     forecast = forecast_part_direct_delta(part=part, deltas=deltas, sort_by=sort_by, CI=ci)
 
