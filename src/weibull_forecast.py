@@ -410,7 +410,7 @@ def _extract_installed_running_times(data):
     if len(installed_assets) == 0:
         raise DataError('No installed assets with CURRENT_STATE == "I" found.')
 
-    running_times = []
+    full_running_times = []
     for asset in installed_assets:
         if 'FULL_RUNNING_TIME' not in asset:
             raise KeyError('installed_assets must contain FULL_RUNNING_TIME for every asset.')
@@ -419,25 +419,29 @@ def _extract_installed_running_times(data):
             continue
         value = float(value)
         if np.isfinite(value) and value >= 0:
-            running_times.append(value)
+            full_running_times.append(value)
 
-    if len(running_times) == 0:
+    if len(full_running_times) == 0:
         raise DataError('No valid FULL_RUNNING_TIME values found for installed assets.')
 
-    return running_times
+    return full_running_times
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Main high-level API
 # ----------------------------------------------------------------------------------------------------------------------
-def forecast_part_direct_delta(part, deltas, sort_by='BIC', CI=0.95, delta_ic=0.1):
+def forecast_part_direct_delta(part, deltas, data=None, sort_by='BIC', CI=0.95, delta_ic=0.1):
     """
     Full forecast pipeline with direct analytical delta-method CI for expected failures.
     """
     if not part:
         raise RuntimeError('Invalid request: part not specified.')
 
-    data = get_failures_and_suspensions(part)
+    if data:
+        data = data[part]
+    else:
+        data = get_failures_and_suspensions(part)
+
     failures = data['failures']
     suspensions = data.get('suspensions') or []
     installed_running_times = _extract_installed_running_times(data)
@@ -457,8 +461,7 @@ def forecast_part_direct_delta(part, deltas, sort_by='BIC', CI=0.95, delta_ic=0.
     for d in deltas:
         results.append(_expected_failures_direct_delta(fit=fit, installed_running_times=installed_running_times, delta=float(d),
                                                        failures=failures, right_censored=suspensions if len(suspensions) > 0 else None,
-                                                       CI=CI
-                        )
+                                                       CI=CI)
         )
 
     logger.info(f'Direct-delta forecast created for part="{part}", model="{best_model}", '
@@ -477,6 +480,69 @@ def forecast_part_direct_delta(part, deltas, sort_by='BIC', CI=0.95, delta_ic=0.
                                             'results': [results[0]],
                                             'fit_table': fit_table
                                             }
+
+
+def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1, failure_threshold=None,
+                                    skip_errors=True, return_dataframe=False):
+    """
+    Run the direct-delta forecast for every part available in cached Weibull data.
+
+    Parameters
+    ----------
+    deltas : float | list[float]
+        Forecast horizon(s) in days.
+    sort_by : str, default 'BIC'
+        Criterion passed to model comparison.
+    CI : float, default 0.95
+        Confidence level.
+    delta_ic : float, default 0.1
+        Threshold used by compare_best_distribution().
+    failure_threshold : int | None
+        Only used for error messages / compatibility. Can usually stay None.
+    skip_errors : bool, default True
+        If True, continue processing other parts when one part fails.
+    return_dataframe : bool, default False
+        If True, return one concatenated pandas DataFrame instead of raw dicts.
+
+    Returns
+    -------
+    dict | pandas.DataFrame
+        If return_dataframe=False:
+            {
+                'results': {part_name: forecast_dict, ...},
+                'errors': {part_name: 'error message', ...}
+            }
+
+        If return_dataframe=True:
+            concatenated DataFrame for all successful parts.
+    """
+    data_all = get_failures_and_suspensions(part=None)
+    part_names = list(data_all.keys())
+
+    results = {}
+    errors = {}
+
+    for part in part_names:
+        try:
+            forecast = forecast_part_direct_delta(part=part, deltas=deltas, data=data_all, sort_by=sort_by, CI=CI, delta_ic=delta_ic)
+            results[part] = forecast
+
+        except Exception as e:
+            if skip_errors:
+                errors[part] = str(e)
+                logger.warning(f'Forecast failed for part="{part}": {e}')
+            else:
+                raise
+
+    if return_dataframe:
+        frames = [forecast_to_dataframe(single_forecast) for single_forecast in results.values()]
+        if len(frames) == 0:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True)
+
+    return {'results': results,
+            'errors': errors
+    }
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -541,11 +607,15 @@ if __name__ == '__main__':
     from weibull_user_input import ask_sort_by, ask_ci, ask_deltas
 
     part = input('Enter part name: ').strip()
-    sort_by = ask_sort_by(default='CV')
+    sort_by = ask_sort_by(default='BIC')
     ci = ask_ci(default=0.95)
     deltas = ask_deltas(default=[90.0, 180.0, 365.0])
 
-    forecast = forecast_part_direct_delta(part=part, deltas=deltas, sort_by=sort_by, CI=ci)
+    data = get_failures_and_suspensions()
+
+    print('data is fetched.')
+
+    forecast = forecast_part_direct_delta(part=part, deltas=deltas, data=data, sort_by=sort_by, CI=ci)
 
     print_forecast(forecast, CI=ci)
     print(forecast_to_dataframe(forecast).to_string(index=False))
