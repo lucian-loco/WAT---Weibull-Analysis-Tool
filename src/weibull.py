@@ -16,9 +16,13 @@ from weibull_ci import weibull_mixture_fisher_bounds
 from weibull_ci import weibull_mixture_bootstrap_bounds
 from weibull_ci import weibull_mixture_analytical_bounds
 from weibull_evaluation import compare_best_distribution
+from weibull_forecast import forecast_all_parts_direct_delta
 import io
 import os
+import datetime
+from zoneinfo import ZoneInfo
 import warnings
+import threading
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -612,6 +616,109 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform an automated Weibull Analysis to the HITDB Data by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
+_weibull_analysis_cache = None
+_analysis_cache_timestamp = None
+_analysis_cache_lock = threading.Lock()
+
+_weibull_forecast_cache = None
+_forecast_cache_lock = threading.Lock()
+
+
+def refresh_analysis_cache(sort_by='CV', ci=0.95, delta_ic=0.1):
+    """
+    Pre-compute Weibull model selection for every cached part using the
+    default parameters that route_weibull_plot and route_reliability_plot use.
+    Must be called AFTER refresh_cache() so _weibull_cache is populated.
+    """
+    global _weibull_analysis_cache, _analysis_cache_timestamp
+
+    from data_weibull import _weibull_cache
+
+    if _weibull_cache is None:
+        logger.warning('Analysis cache refresh skipped — data cache is empty.')
+        return
+
+    logger.info('Weibull analysis cache refresh started...')
+
+    new_cache = {}
+    errors = {}
+
+    # get_failures_and_suspensions(None) reads from _weibull_cache
+    all_data = get_failures_and_suspensions(part=None)
+
+    for part, data in all_data.items():
+        try:
+            # weibull_fit_best always uses 'BIC' internally; CV is applied only in compare_best_distribution via the sort_by argument
+            sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+            fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
+
+            best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
+
+            new_cache[part] = {'best_model': best_model,
+                               'fit_table': fit_table,
+                               'data': data}
+
+        except Exception as e:
+            errors[part] = str(e)
+            logger.warning(f'Analysis cache: skipped "{part}": {e}')
+
+    with _analysis_cache_lock:
+        _weibull_analysis_cache = new_cache
+        _analysis_cache_timestamp = datetime.datetime.now(tz=ZoneInfo('Europe/Zurich'))
+
+    logger.info(f'Analysis cache refresh completed: {len(new_cache)} parts OK, {len(errors)} parts skipped.')
+
+    if errors:
+        logger.debug(f'Analysis cache errors: {errors}')
+
+
+def refresh_forecast_cache(deltas=None, sort_by='BIC', ci=0.95):
+    """
+    Pre-compute failure forecasts for every cached part.
+    Must be called AFTER refresh_analysis_cache().
+    """
+    global _weibull_forecast_cache
+
+    from data_weibull import _weibull_cache
+
+    if _weibull_cache is None:
+        logger.warning('Forecast cache refresh skipped — data cache is empty.')
+        return
+
+    if deltas is None:
+        deltas = [90.0, 180.0, 365.0, 1095.0, 1825.0]
+
+    logger.info('Forecast cache refresh started...')
+
+    weibull_analysis_cached_results = _weibull_analysis_cache
+
+    if weibull_analysis_cached_results:
+        result = forecast_all_parts_direct_delta(deltas=deltas, sort_by=sort_by, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True)
+    else:
+        result = {}
+        logger.ino(f'Calculation of results for the expected number of failures were not possible because there are no weibull_analysis_cached_results.')
+
+    with _forecast_cache_lock:
+        _weibull_forecast_cache = result
+
+    n_ok = len(result.get('results', {}))
+    n_err = len(result.get('errors', {}))
+
+    logger.info(f'Forecast cache refresh completed: {n_ok} parts OK, {n_err} skipped.')
+
+
+def get_analysis_cache():
+    return _weibull_analysis_cache
+
+
+def get_analysis_cache_timestamp():
+    return _analysis_cache_timestamp
+
+
+def get_forecast_cache():
+    return _weibull_forecast_cache
+
+
 # ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
 def automated_weibull(save_path=None, return_sf=False, delta=0.1):
     failure_threshold = ask_threshold("Failure threshold", default=4)
@@ -703,7 +810,7 @@ def manual_weibull(part, return_sf=False, delta=0.1):
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
                   'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
-                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),}
+                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf)}
 
     fit_function = fitter_map.get(compared_best)
 
@@ -726,10 +833,26 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
         raise RuntimeError('Invalid request ("part" not specified)')
 
     buffer = io.BytesIO()   # Save plot in RAM
+    
+    analysis_cache = get_analysis_cache()
+    
+    # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
+    using_cached_analysis = (sort_by == 'CV')
+    
+    if using_cached_analysis and analysis_cache and part in analysis_cache:
+        cached = analysis_cache[part]
+        compared_best = cached['best_model']
+        data = cached['data']
+        logger.debug(f'generate_graph: cache available for "{part}".')
+    else:
+        # Only recompute if sort_by differs from default
+        logger.debug(f'generate_graph: cache MISS for "{part}" (sort_by={sort_by})')
 
-    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
+        sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
+        wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
+
+        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),

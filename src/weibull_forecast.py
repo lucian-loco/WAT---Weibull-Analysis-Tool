@@ -44,9 +44,7 @@ import autograd
 import autograd.numpy as anp
 from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture
 from data_weibull import get_failures_and_suspensions
-from weibull import weibull_fit_best
 from weibull_ci import _compute_covariance
-from weibull_evaluation import compare_best_distribution
 from utils import get_logger, DataError
 
 logger = get_logger(__name__)
@@ -430,7 +428,7 @@ def _extract_installed_running_times(data):
 # ----------------------------------------------------------------------------------------------------------------------
 # Main high-level API
 # ----------------------------------------------------------------------------------------------------------------------
-def forecast_part_direct_delta(part, deltas, data=None, sort_by='BIC', CI=0.95, delta_ic=0.1):
+def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, sort_by='BIC', CI=0.95, delta_ic=0.1):
     """
     Full forecast pipeline with direct analytical delta-method CI for expected failures.
     """
@@ -445,11 +443,6 @@ def forecast_part_direct_delta(part, deltas, data=None, sort_by='BIC', CI=0.95, 
     failures = data['failures']
     suspensions = data.get('suspensions') or []
     installed_running_times = _extract_installed_running_times(data)
-
-    sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
-    fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
-
-    best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic,)
 
     fit = _refit_model(model_name=best_model, failures=failures, suspensions=suspensions if len(suspensions) > 0 else None)
 
@@ -482,7 +475,7 @@ def forecast_part_direct_delta(part, deltas, data=None, sort_by='BIC', CI=0.95, 
                                             }
 
 
-def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1, failure_threshold=None,
+def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1, cached_results=None,
                                     skip_errors=True, return_dataframe=False):
     """
     Run the direct-delta forecast for every part available in cached Weibull data.
@@ -497,8 +490,8 @@ def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1
         Confidence level.
     delta_ic : float, default 0.1
         Threshold used by compare_best_distribution().
-    failure_threshold : int | None
-        Only used for error messages / compatibility. Can usually stay None.
+    cached_results : Dict | None
+        Used to access the results instead of calculating them again.
     skip_errors : bool, default True
         If True, continue processing other parts when one part fails.
     return_dataframe : bool, default False
@@ -524,7 +517,10 @@ def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1
 
     for part in part_names:
         try:
-            forecast = forecast_part_direct_delta(part=part, deltas=deltas, data=data_all, sort_by=sort_by, CI=CI, delta_ic=delta_ic)
+            cached_part_results = cached_results[part]
+            fit_table = cached_part_results['fit_table']
+            best_model = cached_part_results['best_model']
+            forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data_all, sort_by=sort_by, CI=CI, delta_ic=delta_ic)
             results[part] = forecast
 
         except Exception as e:
@@ -538,6 +534,7 @@ def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1
         frames = [forecast_to_dataframe(single_forecast) for single_forecast in results.values()]
         if len(frames) == 0:
             return pd.DataFrame()
+
         return pd.concat(frames, ignore_index=True)
 
     return {'results': results,
@@ -605,6 +602,9 @@ def print_forecast(forecast, CI=0.95):
 # ----------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     from weibull_user_input import ask_sort_by, ask_ci, ask_deltas
+    from weibull import weibull_fit_best
+    from weibull_evaluation import compare_best_distribution
+
 
     part = input('Enter part name: ').strip()
     sort_by = ask_sort_by(default='BIC')
@@ -613,9 +613,11 @@ if __name__ == '__main__':
 
     data = get_failures_and_suspensions()
 
-    print('data is fetched.')
+    sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+    fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
+    best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
-    forecast = forecast_part_direct_delta(part=part, deltas=deltas, data=data, sort_by=sort_by, CI=ci)
+    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table= fit_table, best_model=best_model, data=data, sort_by=sort_by, CI=ci)
 
     print_forecast(forecast, CI=ci)
     print(forecast_to_dataframe(forecast).to_string(index=False))
