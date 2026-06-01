@@ -264,7 +264,8 @@ def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_
                                 'installed_assets': installed_df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records'),
                                 'all_assets': df[['ASSET_ID', 'RUNNING_TIME', 'STATUS', 'FAILURE_DATE', 'CURRENT_STATE', 'FULL_RUNNING_TIME']].to_dict('records')}
 
-            return weibull_lists
+        return weibull_lists
+
     else:
         if part not in data:
             raise DataError(f'Part {part} not found in data. Probably there were too few failures. '
