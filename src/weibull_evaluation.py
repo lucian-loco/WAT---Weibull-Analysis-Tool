@@ -187,20 +187,77 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
 
 def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.1) -> dict:
     """
-    Stratified K-fold CV on Weibull 2P, 3P, Competing Risk, Mixture.
+    Repeated Stratified K-Fold CV on Weibull 2P, 3P, Competing Risk, and Mixture models.
 
-    Per-model minimum failures are enforced globally and per fold:
-      - 2P:  >= 4 failures (global) and >= 2 failures in train fold
-      - 3P:  >= 4 failures (global) and >= 3 failures in train fold
-      - CR:  >= 16 failures (global) and >= 4 failures in train fold
-      - Mix: >= 16 failures (global) and >= 5 failures in train fold
+    Feasibility is enforced at two levels:
+    - Globally: based on total failure count and distinct failure count (see get_globally_allowed_models_for_cv)
+    - Per fold: minimum failures in the training fold required per model:
+        - 2P:      >= 2 failures in train fold
+        - 3P:      >= 3 failures in train fold
+        - CR:      >= 4 failures in train fold
+        - Mixture: >= 5 failures in train fold
 
-    Returns:
-      - avg_cv_nll: dict[model_name -> avg NLL or inf]
-      - cv_numeric_winner: best model by avg NLL (among feasible ones) or None
-      - cv_equivalent_models: list of equivalent models (Nadeau&Bengio + Bonferroni) among feasible ones
-      - cv_parsimonious_winner: simplest model in equivalent group or None
-      - cv_has_valid_models: bool indicating if at least one model had finite avg NLL
+    Early-failure protection: the single earliest failure is always kept in the training fold
+    and never assigned to validation, to avoid degenerate fold splits.
+
+    Stratification guard: if censored observations exist but either class (failures or censored)
+    has fewer than n_folds members, CV is aborted and cv_has_valid_models=False is returned.
+
+    Model selection:
+    - All valid models (globally allowed, at least one finite fold score) are ranked by avg_cv_nll.
+    - The numeric best model is identified (lowest avg_cv_nll).
+    - An equivalence group is formed: all valid models whose avg_cv_nll is within delta of the best.
+    - Among the equivalence group, the simplest model (by parameter count) is selected as the
+      parsimonious winner (Occam's Razor: 2P < 3P < CR < Mixture).
+
+    Parameters
+    ----------
+    part : str
+        Label of the part / dataset, used in printed feedback messages.
+    failures : np.ndarray
+        Array of observed failure times.
+    censored : np.ndarray | None
+        Array of right-censored times. Pass None or empty array if no suspensions.
+    seed : int, optional
+        Random state for RepeatedStratifiedKFold. Fixed seed ensures reproducibility;
+        sklearn internally derives different permutations for each repeat automatically.
+        Default: 42.
+    n_folds : int, optional
+        Number of CV folds (k in k-fold). Default: 5.
+    n_repeats : int, optional
+        Number of times the full k-fold CV is repeated with different splits.
+        Increasing n_repeats improves stability of avg_cv_nll estimates.
+        Default: 5.
+    delta : float, optional
+        Equivalence threshold on avg_cv_nll. A model is included in the equivalence group
+        if its avg_cv_nll does not exceed the best model's avg_cv_nll by more than delta.
+        Delta controls how broad the set of "close enough" models is before parsimony is applied:
+        smaller values make the eligibility rule stricter, while larger values allow more models
+        to remain eligible for the final simplicity-based choice. In the final step, the
+        simplest model within the equivalence group is selected. Thus, delta does not directly
+        favor simple or complex models; it only determines how many models are allowed to
+        compete in the parsimony step. To be tuned via sensitivity analysis.
+
+    Returns
+    -------
+    dict with keys:
+        avg_cv_nll : dict[str, float]
+            Mean CV negative log-likelihood per model across all finite fold scores.
+            Models with no finite scores receive float('inf').
+        std_cv_nll : dict[str, float]
+            Sample standard deviation (ddof=1) of fold-wise CV NLL per model.
+            float('nan') if fewer than 2 finite scores.
+        se_cv_nll : dict[str, float]
+            Standard error of the mean CV NLL per model (std / sqrt(n_finite_scores)).
+            float('nan') if fewer than 2 finite scores.
+        cv_numeric_winner : str | None
+            Model with the lowest avg_cv_nll among valid models. None if no valid models.
+        cv_equivalent_models : list[str]
+            All valid models within delta of the numeric winner's avg_cv_nll.
+        cv_parsimonious_winner : str | None
+            Simplest model in cv_equivalent_models. None if no valid models.
+        cv_has_valid_models : bool
+            True if at least one model produced a finite avg_cv_nll and CV ran successfully.
     """
     failures = np.asarray(failures, dtype=float)
     censored = np.asarray(censored, dtype=float) if censored is not None and len(censored) > 0 else np.array([], dtype=float)
@@ -226,6 +283,8 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
         all_model_names = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
 
         return {"avg_cv_nll": {name: float("inf") for name in all_model_names},
+                "std_cv_nll": {},
+                "se_cv_nll": {},
                 "cv_numeric_winner": None,
                 "cv_equivalent_models": [],
                 "cv_parsimonious_winner": None,
