@@ -47,7 +47,8 @@
         Best model: <strong>{{ output.best_model }}</strong> &nbsp;|&nbsp;
         Installed units: <strong>{{ output.n_installed }}</strong> &nbsp;|&nbsp;
         Confidence interval: <strong>{{ (ci * 100) | round(0) | int }}%</strong> &nbsp;|&nbsp;
-        Method: <strong>Direct analytical delta method for confidence bounds</strong>
+        CI Method: <strong>Analytical delta method</strong> |
+        Selection method: <strong>{{ sort_by }}</strong>
     </div>
 
     <h3>Expected number of failures</h3>

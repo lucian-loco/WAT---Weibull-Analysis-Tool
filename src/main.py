@@ -196,7 +196,7 @@ def route_forecast_form():
             except RuntimeError as e:
                 return 'Forecast cannot be calculated: ' + str(e), 400
 
-            return render_template('forecast_results.html', output=forecast, ci=ci)
+            return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=sb)
 
     return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95})
 
