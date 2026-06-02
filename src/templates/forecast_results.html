@@ -47,7 +47,7 @@
         Best model: <strong>{{ output.best_model }}</strong> &nbsp;|&nbsp;
         Installed units: <strong>{{ output.n_installed }}</strong> &nbsp;|&nbsp;
         Confidence interval: <strong>{{ (ci * 100) | round(0) | int }}%</strong> &nbsp;|&nbsp;
-        Method: <strong>Direct analytical delta method</strong>
+        Method: <strong>Direct analytical delta method for confidence bounds</strong>
     </div>
 
     <h3>Expected number of failures</h3>
@@ -65,9 +65,9 @@
             {% for r in output.results %}
             <tr class="{{ 'no-ci' if r.lower_bound is none else '' }}">
                 <td class="center">{{ r.delta | int }}</td>
-                <td>{{ "%.4f" | format(r.expected_failures) }}</td>
-                <td>{% if r.lower_bound is not none %}{{ "%.4f" | format(r.lower_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
-                <td>{% if r.upper_bound is not none %}{{ "%.4f" | format(r.upper_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
+                <td>{{ "%.1f" | format(r.expected_failures) }}</td>
+                <td>{% if r.lower_bound is not none %}{{ "%.1f" | format(r.lower_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
+                <td>{% if r.upper_bound is not none %}{{ "%.1f" | format(r.upper_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
                 <td>{% if r.standard_error is not none %}{{ "%.4f" | format(r.standard_error) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
             </tr>
             {% endfor %}
