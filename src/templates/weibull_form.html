@@ -3,30 +3,39 @@
 <title>HIT Weibull Analysis</title>
 <head>
     <meta charset="UTF-8">
-    <style type="text/css">
-        body {
-            font-family: sans-serif;
-            margin: 40px;
-        }
-        label {
-            display: block;
+    <style>
+        body { font-family: sans-serif; margin: 40px; }
+        label { display: block; margin-top: 16px; font-weight: bold; }
+        input, select { margin-top: 4px; padding: 4px; font-size: 1em; }
+        .error { color: red; margin-left: 8px; }
+        button { margin-top: 24px; padding: 8px 20px; font-size: 1em; cursor: pointer; }
+
+        /* ── loading feedback ── */
+        #loading {
+            display: none;
+            align-items: center;
+            gap: 10px;
             margin-top: 16px;
-            font-weight: bold;
+            color: #555;
+            font-size: 0.95em;
         }
-        input, select {
-            margin-top: 4px;
-            padding: 4px;
-            font-size: 1em;
+        #loading.visible { display: flex; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
-        .error {
-            color: red;
-            margin-left: 8px;
+        .spinner {
+            width: 20px; height: 20px;
+            border: 3px solid #ccc;
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
         }
-        button {
-            margin-top: 24px;
-            padding: 8px 20px;
-            font-size: 1em;
-            cursor: pointer;
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
     </style>
 </head>
@@ -35,7 +44,7 @@
     <h2>Weibull Analysis for: <code>{{ part }}</code></h2>
 
     {# part is kept as URL parameter so it is available in the POST request #}
-    <form action="/weibull_form?part={{ part }}" method="post">
+    <form action="/weibull_form?part={{ part }}" method="post" id="weibull-form">
 
         <label for="plot_type">Plot type</label>
         <select id="plot_type" name="plot_type">
@@ -65,9 +74,21 @@
         {% endif %}
 
         <br>
-        <button type="submit">Generate Plot</button>
+        <button type="submit" id="submit-btn">Generate Plot</button>
+
+        <div id="loading">
+            <div class="spinner"></div>
+            <span>Generating plot, please wait…</span>
+        </div>
 
     </form>
+
+    <script>
+        document.getElementById('weibull-form').addEventListener('submit', function () {
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('loading').classList.add('visible');
+        });
+    </script>
 </body>
 </html>
 

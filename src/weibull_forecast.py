@@ -460,18 +460,22 @@ def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, s
     logger.info(f'Direct-delta forecast created for part="{part}", model="{best_model}", '
                 f'n_installed={len(installed_running_times)}, deltas={deltas}, CI={CI}')
 
+    # Filter fit_table to best model row only, drop unused columns
+    cols_to_drop = ['DS', 'Mu', 'Sigma', 'Lambda', 'Log-likelihood', 'AICc', 'BIC', 'AD']
+    fit_table_display = (fit_table[fit_table['Distribution'] == best_model].drop(columns=[c for c in cols_to_drop if c in fit_table.columns]).reset_index(drop=True))
+
     output = {'part': part,
               'best_model': best_model,
               'n_installed': len(installed_running_times),
               'results': results,
-              'fit_table': fit_table
+              'fit_table': fit_table_display
     }
 
     return output if not scalar_input else {'part': part,
                                             'best_model': best_model,
                                             'n_installed': len(installed_running_times),
                                             'results': [results[0]],
-                                            'fit_table': fit_table
+                                            'fit_table': fit_table_display
                                             }
 
 

@@ -51,6 +51,22 @@ def validate_type(value_str: str, default: str = 'Failure Probability'):
     return None, f"Invalid input, please enter one of {valid}."
 
 
+def validate_fc(value_str: str, default: list[float] = None):
+    if default is None:
+        default = [180.0, 365.0, 730.0, 1095.0]
+    if value_str.strip() == "":
+        return default, None
+    try:
+        values = [float(v.strip()) for v in value_str.split(',') if v.strip()]
+        if not values:
+            return None, "Please enter at least one forecast time."
+        if any(v < 1 for v in values):
+            return None, "All forecast times must be ≥ 1 day."
+        return values, None
+    except ValueError:
+        return None, "Invalid input — use numbers separated by commas (e.g. 365, 730)."
+
+
 class DataError(RuntimeError):
     pass
 

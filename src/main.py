@@ -10,8 +10,10 @@ import io
 import requests
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from apscheduler.schedulers.background import BackgroundScheduler
+from weibull_forecast import forecast_part_direct_delta
 from data_weibull import refresh_cache, weibull_cache_enabled
-from weibull import generate_graph, refresh_analysis_cache, refresh_forecast_cache
+from weibull_evaluation import compare_best_distribution
+from weibull import generate_graph, refresh_analysis_cache, refresh_forecast_cache, get_analysis_cache, weibull_fit_best
 import atexit
 from markupsafe import escape
 
@@ -153,6 +155,49 @@ def route_weibull_form():
             return send_file(graph, mimetype='image/png')
 
     return render_template('weibull_form.html', part=part, errors=errors, defaults={'plot_type': 'Failure Probability', 'sort_by': 'CV', 'ci': 0.95})
+
+
+@app.route('/forecast_form', methods=['GET', 'POST'])
+def route_forecast_form():
+    part = request.args.get('part')
+
+    if not part:
+        return 'Parameter "part" not valid or is missing', 400
+
+    errors = {}
+
+    if request.method == 'POST':
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
+        if err: errors['sort_by'] = err
+
+        fc_values, err = utils.validate_fc(request.form.get('fc', ''))
+        if err: errors['fc'] = err
+
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
+        if err: errors['ci'] = err
+
+        if not errors:
+            try:
+                analysis_cache = get_analysis_cache()
+                # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
+                using_cached_analysis = (sb == 'CV')
+
+                if using_cached_analysis and analysis_cache and part in analysis_cache:
+                    cached = analysis_cache[part]
+                    best_model = cached['best_model']
+                    wb_data_fit_all = cached['fit_table']
+                else:
+                    sort_for_fit = sb if sb != 'CV' else 'BIC'
+                    wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
+                    best_model = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.1)
+
+                forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
+            except RuntimeError as e:
+                return 'Forecast cannot be calculated: ' + str(e), 400
+
+            return render_template('forecast_results.html', output=forecast, ci=ci)
+
+    return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95})
 
 
 @app.route('/crate/new')

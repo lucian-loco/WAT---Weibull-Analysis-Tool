@@ -890,7 +890,10 @@ if __name__ == "__main__":
 
     # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
 
-    manual_weibull(part='HCCTRV')
+    fit_table, _, _ = weibull_fit_best(part='HCCTRV')
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(fit_table)
+
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
     # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)
 #     # data, _, name = manual_weibull('HCCFISA')
