@@ -696,7 +696,7 @@ def refresh_forecast_cache(deltas=None, ci=0.95):
         result = forecast_all_parts_direct_delta(deltas=deltas, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True)
     else:
         result = {}
-        logger.ino(f'Calculation of results for the expected number of failures were not possible because there are no weibull_analysis_cached_results.')
+        logger.info(f'Calculation of results for the expected number of failures were not possible because there are no weibull_analysis_cached_results.')
 
     with _forecast_cache_lock:
         _weibull_forecast_cache = result
@@ -890,9 +890,15 @@ if __name__ == "__main__":
 
     # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
 
-    fit_table, _, _ = weibull_fit_best(part='HCCTRV')
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(fit_table)
+    # fit_table, _, _ = weibull_fit_best(part='HCCTRV')
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(fit_table)
+
+    from data_weibull import refresh_cache
+
+    refresh_cache()  # 1. Pull from DB
+    refresh_analysis_cache()  # 2. Model selection with CV (default)
+    refresh_forecast_cache()  # 3. Expected failure forecasts
 
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
     # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)
