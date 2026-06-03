@@ -28,7 +28,7 @@ def refresh_all():
     """Full refresh chain: data → model selection → forecast of expected failures"""
     refresh_cache()             # 1. Pull from DB
     refresh_analysis_cache()    # 2. Model selection with CV (default)
-    refresh_forecast_cache()    # 3. Expected failure forecasts    http://194.12.144.44:8888/forecast_form?part=HCCTRP
+    refresh_forecast_cache()    # 3. Expected failure forecasts
 
 
 if weibull_cache_enabled:
