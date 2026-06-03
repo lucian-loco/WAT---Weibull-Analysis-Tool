@@ -14,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from weibull_forecast import forecast_part_direct_delta
 from data_weibull import refresh_cache, weibull_cache_enabled
 from weibull_evaluation import compare_best_distribution
+from reliability_confluence_summary import reliability_summary_table
 from weibull import generate_graph, refresh_analysis_cache, refresh_forecast_cache, get_analysis_cache, weibull_fit_best
 import atexit
 from markupsafe import escape
@@ -29,6 +30,10 @@ def refresh_all():
     refresh_cache()             # 1. Pull from DB
     refresh_analysis_cache()    # 2. Model selection with CV (default)
     refresh_forecast_cache()    # 3. Expected failure forecasts
+    try:
+        reliability_summary_table()
+    except RuntimeError as e:
+        return 'Reliability table could not be generated in confluence: ' + str(e), 400
 
 
 if weibull_cache_enabled:
