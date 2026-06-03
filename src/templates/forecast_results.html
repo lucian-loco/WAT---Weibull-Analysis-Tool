@@ -38,6 +38,47 @@
             display: inline-block;
             font-size: 0.95em;
         }
+
+        /* ── Date-lookup toolbar ── */
+        .date-lookup {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
+        }
+        .date-lookup label {
+            font-size: 0.9em;
+            color: #444;
+        }
+        .date-lookup input[type="date"] {
+            font-size: 0.9em;
+            padding: 4px 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+        }
+        .date-lookup button {
+            font-size: 0.85em;
+            padding: 4px 12px;
+            border: 1px solid #888;
+            border-radius: 4px;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+        .date-lookup button:hover { background: #e8e8e8; }
+        #date-result {
+            font-size: 0.9em;
+            color: #333;
+            margin-left: 4px;
+        }
+        #date-result .days-val {
+            font-weight: bold;
+            color: #01696f;
+        }
+        #date-result .warn {
+            color: #c0392b;
+        }
     </style>
 </head>
 <body>
@@ -52,6 +93,14 @@
     </div>
 
     <h3>Expected number of failures</h3>
+
+    <div class="date-lookup">
+        <label for="target-date">Jump to date:</label>
+        <input type="date" id="target-date" />
+        <button onclick="calcDays()">Calculate days</button>
+        <span id="date-result"></span>
+    </div>
+
     <table>
         <thead>
             <tr>
@@ -107,6 +156,39 @@
     {% endif %}
 
     <a class="back" href="/forecast_form?part={{ output.part }}">← Back to forecast form</a>
+
+    <script>
+    function calcDays() {
+        const input = document.getElementById('target-date').value;
+        const out   = document.getElementById('date-result');
+
+        if (!input) {
+            out.innerHTML = '<span class="warn">Please select a date.</span>';
+            return;
+        }
+
+        // Today at midnight (local time), no time-zone offset confusion
+        const today  = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const target = new Date(input + 'T00:00:00');   // force local midnight
+        const diffMs = target - today;
+        const days   = Math.round(diffMs / 86_400_000);
+
+        if (days < 0) {
+            out.innerHTML = `<span class="warn">Date is ${Math.abs(days)} day(s) in the past.</span>`;
+        } else if (days === 0) {
+            out.innerHTML = '<span class="warn">Date is today (0 days).</span>';
+        } else {
+            out.innerHTML = `→ <span class="days-val">${days} day(s)</span> from today`;
+        }
+    }
+
+    // Allow pressing Enter inside the date field to trigger the calculation
+    document.getElementById('target-date').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') calcDays();
+    });
+    </script>
 
 </body>
 </html>
