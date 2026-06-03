@@ -244,14 +244,10 @@ def reliability_summary_table():
 if __name__ == "__main__":
     from weibull import refresh_analysis_cache, refresh_forecast_cache
     from data_weibull import refresh_cache
-    # import json
 
     refresh_cache()  # 1. Pull from DB
     refresh_analysis_cache()  # 2. Model selection with CV (default)
     refresh_forecast_cache()  # 3. Expected failure forecasts
-
-    # with open('forecast_cache.json', 'r', encoding='utf-8') as f:
-    #     cached_forecast = json.load(f)
 
     try:
         reliability_summary_table()
