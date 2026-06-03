@@ -98,7 +98,7 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
     if weibull_data.empty:
         raise DataError(f'No parts found with more than {failure_threshold} failures and {distinct_threshold} distinct failure times.')
 
-    print(f'Number of assets found: {weibull_data.shape[0]}')
+    logger.info(f'Number of assets found: {weibull_data.shape[0]}')
 
     weibull_data = {name: group for name, group in weibull_data.groupby('PART')}
 
