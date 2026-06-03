@@ -8,6 +8,7 @@ import urllib.parse
 import functools
 import io
 import requests
+from datetime import date, timedelta
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from apscheduler.schedulers.background import BackgroundScheduler
 from weibull_forecast import forecast_part_direct_delta
@@ -27,7 +28,7 @@ def refresh_all():
     """Full refresh chain: data → model selection → forecast of expected failures"""
     refresh_cache()             # 1. Pull from DB
     refresh_analysis_cache()    # 2. Model selection with CV (default)
-    refresh_forecast_cache()    # 3. Expected failure forecasts
+    refresh_forecast_cache()    # 3. Expected failure forecasts    http://194.12.144.44:8888/forecast_form?part=HCCTRP
 
 
 if weibull_cache_enabled:
@@ -196,9 +197,9 @@ def route_forecast_form():
             except RuntimeError as e:
                 return 'Forecast cannot be calculated: ' + str(e), 400
 
-            return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=sb)
+            return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=sb, today=date.today(), timedelta=timedelta)
 
-    return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95})
+    return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95}, today_iso=date.today().isoformat())
 
 
 @app.route('/crate/new')

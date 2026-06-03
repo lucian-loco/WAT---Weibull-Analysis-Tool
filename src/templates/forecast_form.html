@@ -20,6 +20,20 @@
         }
         button { margin-top: 24px; padding: 8px 20px; font-size: 1em; cursor: pointer; }
 
+        .date-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .date-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
         /* ── loading feedback ── */
         #loading {
             display: none;
@@ -65,6 +79,15 @@
         {% endif %}
         <span class="error" id="fc-client-error"></span>
 
+        <label for="fc_date">Add forecast date</label>
+        <div class="date-row">
+            <input type="date" id="fc_date" min="{{ today_iso }}">
+            <button type="button" id="add-date-btn">Add this date</button>
+        </div>
+        <div class="hint">Each date is converted to days from today and appended to the forecast list.</div>
+        <div class="date-list" id="date-tags"></div>
+        <span class="error" id="fc-date-error"></span>
+
         <label for="ci">Confidence Interval [0–1)</label>
         <input type="number" id="ci" name="ci"
                value="{{ defaults.ci }}"
@@ -88,18 +111,24 @@
 
         <div id="loading">
             <div class="spinner"></div>
-            <span>Generating forecast, please wait…</span>
+            <span>Calculating forecast, please wait…</span>
         </div>
 
     </form>
 
     <script>
         const fcInput   = document.getElementById('fc');
+        const fcDateInput = document.getElementById('fc_date');
         const fcTags    = document.getElementById('fc-tags');
+        const dateTags    = document.getElementById('date-tags');
         const fcError   = document.getElementById('fc-client-error');
+        const fcDateError = document.getElementById('fc-date-error');
+        const addDateBtn  = document.getElementById('add-date-btn');
         const form      = document.getElementById('forecast-form');
         const submitBtn = document.getElementById('submit-btn');
         const loading   = document.getElementById('loading');
+
+        const dateEntries = [];
 
         function parseFcValues(raw) {
             return raw.split(',')
@@ -109,7 +138,7 @@
 
         function validateFc(raw) {
             const parts = parseFcValues(raw);
-            if (parts.length === 0) return 'Please enter at least one forecast time.';
+            if (parts.length === 0 && dateEntries.length === 0) return 'Please enter at least one forecast time or add at least one date.';
             for (const p of parts) {
                 const n = Number(p);
                 if (isNaN(n) || n < 1) return `"${p}" is not a valid number ≥ 1.`;
@@ -123,12 +152,59 @@
                 .filter(p => p.length > 0 && !isNaN(Number(p)) && Number(p) >= 1)
                 .map(p => `<span class="tag">${Number(p).toLocaleString()} days</span>`)
                 .join('');
+
+            dateTags.innerHTML = dateEntries
+                .map(entry => `<span class="tag">${entry.days.toLocaleString()} days (${entry.date})</span>`)
+                .join('');
+        }
+
+        function daysFromToday(dateString) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const target = new Date(dateString + 'T00:00:00');
+            target.setHours(0, 0, 0, 0);
+
+            return Math.round((target - today) / 86400000);
+        }
+
+        function addDaysValue(days) {
+            const current = parseFcValues(fcInput.value).map(Number).filter(n => !isNaN(n) && n >= 1);
+            current.push(days);
+
+            const uniqueSorted = [...new Set(current)].sort((a, b) => a - b);
+            fcInput.value = uniqueSorted.join(', ');
+            fcError.textContent = '';
+            renderTags(fcInput.value);
         }
 
         fcInput.addEventListener('input', () => {
             const err = validateFc(fcInput.value);
             fcError.textContent = err ?? '';
             renderTags(fcInput.value);
+        });
+
+        addDateBtn.addEventListener('click', () => {
+            fcDateError.textContent = '';
+
+            if (!fcDateInput.value) {
+                fcDateError.textContent = 'Please choose a date first.';
+                return;
+            }
+
+            const days = daysFromToday(fcDateInput.value);
+            if (days < 1) {
+                fcDateError.textContent = 'Please choose a future date.';
+                return;
+            }
+
+            const exists = dateEntries.some(e => e.date === fcDateInput.value);
+            if (!exists) {
+                dateEntries.push({ date: fcDateInput.value, days: days });
+                addDaysValue(days);
+            }
+
+            fcDateInput.value = '';
         });
 
         // Initial render in case the field is pre-filled by Jinja

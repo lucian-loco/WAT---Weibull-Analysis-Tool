@@ -33,6 +33,8 @@
 
         .na { color: #bbb; }
 
+        .hint { color: #666; font-size: 0.9em; margin-left: 6px; }
+
         .back {
             margin-top: 28px;
             display: inline-block;
@@ -65,7 +67,10 @@
         <tbody>
             {% for r in output.results %}
             <tr class="{{ 'no-ci' if r.lower_bound is none else '' }}">
-                <td class="center">{{ r.delta | int }}</td>
+                <td class="center">
+                    {{ r.delta | int }}
+                    <span class="hint">({{ (today + timedelta(days=r.delta | int)).strftime('%d-%m-%Y') }})</span>
+                </td>
                 <td>{{ "%.1f" | format(r.expected_failures) }}</td>
                 <td>{% if r.lower_bound is not none %}{{ "%.1f" | format(r.lower_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
                 <td>{% if r.upper_bound is not none %}{{ "%.1f" | format(r.upper_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
