@@ -672,7 +672,7 @@ def refresh_analysis_cache(sort_by='CV', ci=0.95, delta_ic=0.1):
         logger.debug(f'Analysis cache errors: {errors}')
 
 
-def refresh_forecast_cache(deltas=None, sort_by='BIC', ci=0.95):
+def refresh_forecast_cache(deltas=None, ci=0.95):
     """
     Pre-compute failure forecasts for every cached part.
     Must be called AFTER refresh_analysis_cache().
@@ -693,7 +693,7 @@ def refresh_forecast_cache(deltas=None, sort_by='BIC', ci=0.95):
     weibull_analysis_cached_results = _weibull_analysis_cache
 
     if weibull_analysis_cached_results:
-        result = forecast_all_parts_direct_delta(deltas=deltas, sort_by=sort_by, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True)
+        result = forecast_all_parts_direct_delta(deltas=deltas, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True)
     else:
         result = {}
         logger.ino(f'Calculation of results for the expected number of failures were not possible because there are no weibull_analysis_cached_results.')

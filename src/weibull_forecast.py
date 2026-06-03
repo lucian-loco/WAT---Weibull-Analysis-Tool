@@ -428,7 +428,7 @@ def _extract_installed_running_times(data):
 # ----------------------------------------------------------------------------------------------------------------------
 # Main high-level API
 # ----------------------------------------------------------------------------------------------------------------------
-def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, sort_by='BIC', CI=0.95, delta_ic=0.1):
+def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, CI=0.95):
     """
     Full forecast pipeline with direct analytical delta-method CI for expected failures.
     """
@@ -479,8 +479,7 @@ def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, s
                                             }
 
 
-def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1, cached_results=None,
-                                    skip_errors=True, return_dataframe=False):
+def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_errors=True, return_dataframe=False):
     """
     Run the direct-delta forecast for every part available in cached Weibull data.
 
@@ -524,7 +523,7 @@ def forecast_all_parts_direct_delta(deltas, sort_by='BIC', CI=0.95, delta_ic=0.1
             cached_part_results = cached_results[part]
             fit_table = cached_part_results['fit_table']
             best_model = cached_part_results['best_model']
-            forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data_all, sort_by=sort_by, CI=CI, delta_ic=delta_ic)
+            forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data_all, CI=CI)
             results[part] = forecast
 
         except Exception as e:
@@ -621,7 +620,7 @@ if __name__ == '__main__':
     fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
     best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
-    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table= fit_table, best_model=best_model, data=data, sort_by=sort_by, CI=ci)
+    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table= fit_table, best_model=best_model, data=data, CI=ci)
 
     print_forecast(forecast, CI=ci)
     print(forecast_to_dataframe(forecast).to_string(index=False))
