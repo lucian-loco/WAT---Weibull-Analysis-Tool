@@ -10,6 +10,7 @@ This script:
 
 import os
 import io
+import html
 import db_hitdata
 import pandas as pd
 from typing import Any
@@ -47,7 +48,7 @@ def format_value_for_confluence(value: Any) -> str:
     value_str = str(value)
 
     # Simple version (no color-coding):
-    return value_str
+    return html.escape(value_str, quote=True)
 
 
 def format_forecast_cell(fr):
@@ -73,23 +74,23 @@ def make_html_table(f, rows):
         rows: List of dictionaries with table data
     """
     if not rows:
-        f.write("<p>No data available. Query to data base was not successful.</p>\\n")
+        f.write("<p>No data available. Query to data base was not successful.</p>\n")
         return
 
     columns = list(rows[0].keys())
 
-    f.write("<table><thead>\\n<tr>")
+    f.write("<table><thead>\n<tr>")
     for col in columns:
         f.write(f"<th>{col}</th>")
 
-    f.write("</tr>\\n</thead><tbody>\\n")
+    f.write("</tr>\n</thead><tbody>\n")
     for row in rows:
         f.write("<tr>")
         for col in columns:
             value = format_value_for_confluence(row.get(col))
             f.write(f"<td>{value or ''}</td>")
-        f.write("</tr>\\n")
-    f.write("</tbody></table>\\n")
+        f.write("</tr>\n")
+    f.write("</tbody></table>\n")
 
 
 def build_forecast_lookup(forecast_results):
@@ -104,7 +105,7 @@ def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
     out = df_query.copy()
 
     for d in deltas:
-        out[f"EXPECTED FAILURES +{int(d)}D"] = "Not available"
+        out[f"EXPECTED FAILURES +{int(d)} Days"] = "Not available"
 
     for idx, row in out.iterrows():
         part = row["EQUIPMENT CODE"]
@@ -118,7 +119,7 @@ def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
             if fr is None:
                 continue
 
-            out.at[idx, f"EXPECTED FAILURES +{int(d)}D"] = format_forecast_cell(fr)
+            out.at[idx, f"EXPECTED FAILURES +{int(d)} Days"] = format_forecast_cell(fr)
 
     return out
 
@@ -159,12 +160,35 @@ def reliability_summary_table():
     if df_query.empty:
         table_rows = []
         logger.warning("Query returned no rows.")
-
     else:
         forecast_pack = get_forecast_cache()
         forecast_lookup = build_forecast_lookup(forecast_pack['results'])
 
         df_final = enrich_query_rows_with_forecast(df_query, forecast_lookup, FORECAST_DELTAS)
+
+        forecast_cols = [f"EXPECTED FAILURES +{int(d)} Days" for d in FORECAST_DELTAS]
+
+        before_forecast = ["EQUIPMENT CODE",
+                           "DESCRIPTION",
+                           "STATUS",
+                           "CATEGORY",
+                           "PLATFORM",
+                           "FUNCTION",
+                           "NUMBER OF ASSETS",
+                           "TOTAL NUMBER OF FAILURES",
+                           "NUMBER OF FIRST FAILURES",
+                           "NUMBER OF UPGRADED ASSETS",
+                           "NUMBER OF INSTALLED ASSETS WITHOUT FAILURE",
+                           "NUMBER OF INSTALLED ASSETS WITH FAILURES IN THE PAST"
+        ]
+
+        after_forecast = ["AVG AGE",
+                          "TOTAL INSTALLATION TIME IN YEARS",
+                          "AVG INSTALLATION TIME IN YEARS",
+                          "MTBF IN YEARS"
+        ]
+
+        df_final = df_final[before_forecast + forecast_cols + after_forecast]
 
         table_rows = df_final.to_dict(orient="records")
 
