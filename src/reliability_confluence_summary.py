@@ -65,7 +65,7 @@ def format_forecast_cell(fr):
     return f"Upper: {upper:.1f}<br/>Expected: {expected:.1f}<br/>Lower: {lower:.1f}"
 
 
-def make_html_table(f, rows):
+def make_html_table(f, rows, html_columns=None):
     """
     Create HTML table exactly like your colleague's wrenscan.py
 
@@ -73,6 +73,8 @@ def make_html_table(f, rows):
         f: File-like object to write to (e.g., io.StringIO())
         rows: List of dictionaries with table data
     """
+    html_columns = set(html_columns or [])
+
     if not rows:
         f.write("<p>No data available. Query to data base was not successful.</p>\n")
         return
@@ -87,8 +89,12 @@ def make_html_table(f, rows):
     for row in rows:
         f.write("<tr>")
         for col in columns:
-            value = format_value_for_confluence(row.get(col))
-            f.write(f"<td>{value or ''}</td>")
+            value = row.get(col)
+            if col in html_columns:
+                cell = "" if value is None else str(value)
+            else:
+                cell = format_value_for_confluence(row.get(col))
+            f.write(f"<td>{cell or ''}</td>")
         f.write("</tr>\n")
     f.write("</tbody></table>\n")
 
@@ -131,6 +137,8 @@ def reliability_summary_table():
     confluence_token = os.environ.get("CONFLUENCE_TOKEN")
     if not confluence_token:
         raise RuntimeError('CONFLUENCE_TOKEN not found.')
+
+    forecast_cols = []
 
     # === CONFIGURATION ===
     SPACE_KEY = "HWI"  # Confluence space key
@@ -226,7 +234,26 @@ def reliability_summary_table():
     # fmt: on
 
     # Add the table
-    make_html_table(f, table_rows)
+    make_html_table(f, table_rows, html_columns=forecast_cols)
 
     c = Confluence(confluence_token)
     c.insert_or_update_page(space_key=SPACE_KEY, ancestor_id=ANCESTOR_ID, title=PAGE_TITLE, content=f.getvalue())
+
+
+
+if __name__ == "__main__":
+    from weibull import refresh_analysis_cache, refresh_forecast_cache
+    from data_weibull import refresh_cache
+    # import json
+
+    refresh_cache()  # 1. Pull from DB
+    refresh_analysis_cache()  # 2. Model selection with CV (default)
+    refresh_forecast_cache()  # 3. Expected failure forecasts
+
+    # with open('forecast_cache.json', 'r', encoding='utf-8') as f:
+    #     cached_forecast = json.load(f)
+
+    try:
+        reliability_summary_table()
+    except Exception as e:
+        print(f'ERROR: {e}')
