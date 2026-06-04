@@ -411,7 +411,6 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
         # ------------------------------------------------------------------
         # 3b. Compute robust NLL for validation
         # ------------------------------------------------------------------
-        logger.info(f'[{part}] starting with computation of NLL for validation...')
         for name in model_names:
             model = models.get(name)
             if model is not None and hasattr(model, "distribution"):
