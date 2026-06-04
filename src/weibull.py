@@ -590,11 +590,12 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
 
     else:
         if failure_size < 16:
-            logger.warning(f'Less than 16 failures in total for "{part}"! It is highly recommended not to use the Weibull Mixture or Weibull CR model. '
-                           f'Therefore, these models will not be used for the fitting.')
+            logger.warning(f'Less than 16 failures in total for "{part}": Weibull_CR and Weibull_Mixture excluded for the fitting.')
             exclude = base_exclude + ['Weibull_CR', 'Weibull_Mixture']
         else:
             exclude = base_exclude
+
+    logger.info(f'[{part}] starting with actual Fit_Everything...')
 
     try:
         wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
@@ -605,6 +606,8 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
                             method='MLE', optimizer='Best')
     except Exception as e:
         raise RuntimeError(f'Weibull fitting all distributions failed for "{part}": {e}')
+
+    logger.info(f'[{part}] Fit_Everything was successful.')
 
     wb_data_fit_all = wb.results
     wb_best_distribution_name = wb.best_distribution_name
@@ -624,7 +627,7 @@ _weibull_forecast_cache = None
 _forecast_cache_lock = threading.Lock()
 
 
-def refresh_analysis_cache(sort_by='CV', ci=0.95, delta_ic=0.1):
+def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
     """
     Pre-compute Weibull model selection for every cached part using the
     default parameters that route_weibull_plot and route_reliability_plot use.
@@ -652,17 +655,24 @@ def refresh_analysis_cache(sort_by='CV', ci=0.95, delta_ic=0.1):
             sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
             fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
 
+            logger.info(f'[{part}] weibull_fit_best was successful.')
+
             best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
+
+            logger.info(f'[{part}] compare_best_distribution was successful.')
 
             new_cache[part] = {'best_model': best_model,
                                'fit_table': fit_table,
                                'data': data}
+
+            logger.info(f'[{part}] saved in new_cache. Continuing with next part...')
 
         except Exception as e:
             errors[part] = str(e)
             logger.warning(f'Analysis cache: skipped "{part}": {e}')
 
     with _analysis_cache_lock:
+        logger.info(f'Saving the cache in global variable.')
         _weibull_analysis_cache = new_cache
         _analysis_cache_timestamp = datetime.datetime.now(tz=ZoneInfo('Europe/Zurich'))
 
@@ -894,11 +904,7 @@ if __name__ == "__main__":
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(fit_table)
 
-    from data_weibull import refresh_cache
-
-    refresh_cache()  # 1. Pull from DB
-    refresh_analysis_cache()  # 2. Model selection with CV (default)
-    refresh_forecast_cache()  # 3. Expected failure forecasts
+    manual_weibull(part='HCCTRVD')
 
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
     # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)

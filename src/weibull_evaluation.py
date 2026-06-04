@@ -5,6 +5,8 @@ import pandas as pd
 from utils import DataError, ThresholdError, NoCacheError
 from sklearn.model_selection import RepeatedStratifiedKFold
 from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture
+from utils import get_logger
+logger = get_logger(__name__)
 
 
 # ToDo: Tune the delta factor
@@ -123,7 +125,11 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
+            logger.info(f'[{part}] Starting now with Cross-Validation for this part.')
+
             cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta)
+
+            logger.info(f'[{part}] Ended with Cross-Validation for this part.')
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
@@ -336,6 +342,7 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # ------------------------------------------------------------------
     # 3. Fold loop
     # ------------------------------------------------------------------
+    logger.info(f'[{part}] starting with loop for Cross-Validation...')
     for train_idx, val_idx in skf.split(all_train_data, status_labels):
 
         # Early failures always in training
@@ -404,6 +411,7 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
         # ------------------------------------------------------------------
         # 3b. Compute robust NLL for validation
         # ------------------------------------------------------------------
+        logger.info(f'[{part}] starting with computation of NLL for validation...')
         for name in model_names:
             model = models.get(name)
             if model is not None and hasattr(model, "distribution"):
@@ -525,17 +533,19 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
 
     final_model = min(equivalent_group, key=lambda m: complexity.get(m, np.inf))
 
+    logger.info(f'[{part}] final model is selected.')
+
     # Feedback: did parsimony change the CV winner?
     parsimony_changed = (final_model != best_name)
     if parsimony_changed:
         # print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
         #       f'but Nadeau & Bengio equivalence + parsimony selected simpler model → {final_model}.')
-        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
+        logger.info(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
               f'but delta≤{delta} equivalence + parsimony selected simpler model → {final_model}.')
     else:
         # print(f'[{part}]: CV - numeric best (avg NLL) → {best_name}, '
         #       f'parsimony (within equivalence group) kept the same model.')
-        print(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
+        logger.info(f'[{part}]: CV - numeric best (avg NLL) → {best_name} ({best_nll:.4f}), '
               f'parsimony kept the same model.')
 
     return {"avg_cv_nll": avg_cv_nll,
