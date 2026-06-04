@@ -30,6 +30,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
               - If AICc and BIC winners agree → that distribution.
               - Else → use ic_fallback column ('AICc' or 'BIC').
     """
+    cv_used = False
     df = df.reset_index(drop=True).copy()
 
     required_cols = {'Distribution', 'AICc', 'BIC'}
@@ -116,7 +117,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                       f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
                       f'parsimony did not change the winner.')
 
-        return final_winner
+        return final_winner, cv_used
 
     # 3) Decide mode based on sort_by
     if sort_by == "CV":
@@ -137,7 +138,8 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                     if winner_cv not in strong_both:
                         print(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
                               f'of AICc and BIC (ΔAICc / ΔBIC ≥ 2). Please check the fit carefully.')
-                    return winner_cv
+                    cv_used = True
+                    return winner_cv, cv_used
                 else:
                     # If data is None or CV not feasible → fall back
                     print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but returned no parsimonious winner.')

@@ -657,7 +657,7 @@ def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
 
             logger.info(f'[{part}] weibull_fit_best was successful.')
 
-            best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
+            best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
 
             logger.info(f'[{part}] compare_best_distribution was successful.')
 
@@ -753,7 +753,7 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.1):
 
         wb_data_fit_all['PART'] = part
 
-        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
+        compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
 
         wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
 
@@ -815,7 +815,7 @@ def manual_weibull(part, return_sf=False, delta=0.1):
 
     wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
+    compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
@@ -862,7 +862,7 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 
         wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
-        compared_best = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
+        compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
     fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
                   'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),

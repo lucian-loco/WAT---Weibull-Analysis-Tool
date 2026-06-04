@@ -195,7 +195,7 @@ def route_forecast_form():
                 else:
                     sort_for_fit = sb if sb != 'CV' else 'BIC'
                     wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
-                    best_model = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.1)
+                    best_model, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.1)
 
                 # ToDo: Maybe use here the cached forecast if possible too
                 forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
