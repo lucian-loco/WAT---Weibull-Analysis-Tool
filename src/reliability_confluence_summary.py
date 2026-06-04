@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
 Python script to update Confluence page with database query table + calculated values
 
