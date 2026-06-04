@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import weibull
+import utils
 import crate
 import layout
 import drawio
@@ -8,9 +8,14 @@ import urllib.parse
 import functools
 import io
 import requests
+from datetime import date, timedelta
 from flask import Flask, render_template, request, send_file, url_for, redirect
 from apscheduler.schedulers.background import BackgroundScheduler
+from weibull_forecast import forecast_part_direct_delta
 from data_weibull import refresh_cache, weibull_cache_enabled
+from weibull_evaluation import compare_best_distribution
+from reliability_confluence_summary import reliability_summary_table
+from weibull import generate_graph, refresh_analysis_cache, refresh_forecast_cache, get_analysis_cache, weibull_fit_best
 import atexit
 from markupsafe import escape
 
@@ -20,11 +25,22 @@ build_date = os.environ.get('APP_BUILD_DATE', 'unknown')
 commit_hash = os.environ.get('APP_GIT_COMMIT', 'unknown')
 
 
+def refresh_all():
+    """Full refresh chain: data → model selection → forecast of expected failures"""
+    refresh_cache()             # 1. Pull from DB
+    refresh_analysis_cache()    # 2. Model selection with CV (default)
+    refresh_forecast_cache()    # 3. Expected failure forecasts
+    try:
+        reliability_summary_table()
+    except RuntimeError as e:
+        return 'Reliability table could not be generated in confluence: ' + str(e), 400
+
+
 if weibull_cache_enabled:
-    refresh_cache()
+    refresh_all()
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(refresh_cache, 'cron', hour=1, minute=0)
+    scheduler.add_job(refresh_all, 'cron', hour=1, minute=0)
     scheduler.start()
 
     atexit.register(lambda: scheduler.shutdown())
@@ -95,7 +111,7 @@ def favicon():
 def route_weibull_plot():
     try:
         part = request.args.get('part')
-        graph = weibull.generate_graph(part)
+        graph = generate_graph(part)
     except RuntimeError as e:
         return 'Weibull plot cannot be generated: ' + str(e), 400
 
@@ -106,7 +122,7 @@ def route_weibull_plot():
 def route_reliability_plot():
     try:
         part = request.args.get('part')
-        graph = weibull.generate_graph(part, return_sf=True)
+        graph = generate_graph(part, return_sf=True)
     except RuntimeError as e:
         return 'Weibull plot cannot be generated: ' + str(e), 400
 
@@ -123,21 +139,72 @@ def route_weibull_form():
     errors = {}
 
     if request.method == 'POST':
-        sb, err = weibull.validate_sort_by(request.form.get('sort_by', ''))
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
         if err: errors['sort_by'] = err
 
-        ci, err = weibull.validate_ci(request.form.get('ci', ''))
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
         if err: errors['ci'] = err
 
+        plot_type, err = utils.validate_type(request.form.get('plot_type', ''))
+        if err: errors['plot_type'] = err
+
         if not errors:
+            if plot_type == 'CDF':
+                return_sf = False
+            else:
+                return_sf = True
             try:
-                graph = weibull.generate_graph(part=part, sort_by=sb, ci=ci)
+                graph = generate_graph(part=part, sort_by=sb, ci=ci, return_sf=return_sf)
             except RuntimeError as e:
                 return 'Weibull plot cannot be generated: ' + str(e), 400
 
             return send_file(graph, mimetype='image/png')
 
-    return render_template('weibull_form.html', part=part, errors=errors, defaults={'sort_by': 'BIC', 'ci': 0.95})
+    return render_template('weibull_form.html', part=part, errors=errors, defaults={'plot_type': 'Failure Probability', 'sort_by': 'CV', 'ci': 0.95})
+
+
+@app.route('/forecast_form', methods=['GET', 'POST'])
+def route_forecast_form():
+    part = request.args.get('part')
+
+    if not part:
+        return 'Parameter "part" not valid or is missing', 400
+
+    errors = {}
+
+    if request.method == 'POST':
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
+        if err: errors['sort_by'] = err
+
+        fc_values, err = utils.validate_fc(request.form.get('fc', ''))
+        if err: errors['fc'] = err
+
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
+        if err: errors['ci'] = err
+
+        if not errors:
+            try:
+                analysis_cache = get_analysis_cache()
+                # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
+                using_cached_analysis = (sb == 'CV')
+
+                if using_cached_analysis and analysis_cache and part in analysis_cache:
+                    cached = analysis_cache[part]
+                    best_model = cached['best_model']
+                    wb_data_fit_all = cached['fit_table']
+                else:
+                    sort_for_fit = sb if sb != 'CV' else 'BIC'
+                    wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
+                    best_model = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.1)
+
+                # ToDo: Maybe use here the cached forecast if possible too
+                forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
+            except RuntimeError as e:
+                return 'Forecast cannot be calculated: ' + str(e), 400
+
+            return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=sb, today=date.today(), timedelta=timedelta)
+
+    return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95}, today_iso=date.today().isoformat())
 
 
 @app.route('/crate/new')

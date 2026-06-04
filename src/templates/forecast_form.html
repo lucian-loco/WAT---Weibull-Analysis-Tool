@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<title>HIT Weibull Forecast</title>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: sans-serif; margin: 40px; }
+        label { display: block; margin-top: 16px; font-weight: bold; }
+        input, select { margin-top: 4px; padding: 4px; font-size: 1em; }
+        #fc { width: 320px; }
+        .error { color: red; margin-left: 8px; }
+        .hint { color: #666; font-size: 0.875em; margin-top: 2px; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .tag {
+            background: #e8f4f8;
+            border: 1px solid #b0d4e3;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.875em;
+        }
+        button { margin-top: 24px; padding: 8px 20px; font-size: 1em; cursor: pointer; }
+
+        .date-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+            margin-top: 4px;
+        }
+        .date-row input[type="date"],
+        .date-row button {
+            margin-top: 0;
+            vertical-align: middle;
+        }
+        .date-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        /* ── loading feedback ── */
+        #loading {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            color: #555;
+            font-size: 0.95em;
+        }
+        #loading.visible { display: flex; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            width: 20px; height: 20px;
+            border: 3px solid #ccc;
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+    </style>
+</head>
+
+<body>
+    <h2>Forecast of expected number of failures for: <code>{{ part }}</code></h2>
+
+    {# part is kept as URL parameter so it is available in the POST request #}
+    <form action="/forecast_form?part={{ part }}" method="post" id="forecast-form">
+
+        <label for="fc">Forecast time(s) in days — separate multiple values with commas</label>
+        <input type="text" id="fc" name="fc"
+               value="{{ defaults.fc }}"
+               placeholder="e.g. 365, 730, 1095"
+               autocomplete="off">
+        <div class="hint">Example: <code>365, 730, 1095</code> for 1, 2, and 3 years</div>
+        <div class="tag-list" id="fc-tags"></div>
+        {% if errors.fc %}
+            <span class="error"> → {{ errors.fc }}</span>
+        {% endif %}
+        <span class="error" id="fc-client-error"></span>
+
+        <label for="fc_date">Add forecast date</label>
+        <div class="date-row">
+            <input type="date" id="fc_date" min="{{ today_iso }}">
+            <button type="button" id="add-date-btn">Add this date</button>
+        </div>
+        <div class="hint">Each date is converted to days from today and appended to the forecast list.</div>
+        <div class="date-list" id="date-tags"></div>
+        <span class="error" id="fc-date-error"></span>
+
+        <label for="ci">Confidence Interval [0–1)</label>
+        <input type="number" id="ci" name="ci"
+               value="{{ defaults.ci }}"
+               step="0.01" min="0.0" max="0.99">
+        {% if errors.ci %}
+            <span class="error"> → {{ errors.ci }}</span>
+        {% endif %}
+
+        <label for="sort_by">Selection method</label>
+        <select id="sort_by" name="sort_by">
+            <option value="CV"   {% if defaults.sort_by == 'CV' %}selected{% endif %}>CV</option>
+            <option value="BIC"  {% if defaults.sort_by == 'BIC'  %}selected{% endif %}>BIC</option>
+            <option value="AICc" {% if defaults.sort_by == 'AICc' %}selected{% endif %}>AICc</option>
+        </select>
+        {% if errors.sort_by %}
+            <span class="error"> → {{ errors.sort_by }}</span>
+        {% endif %}
+
+        <br>
+        <button type="submit" id="submit-btn">Calculate Forecast</button>
+
+        <div id="loading">
+            <div class="spinner"></div>
+            <span>Calculating forecast, please wait…</span>
+        </div>
+
+    </form>
+
+    <script>
+        const fcInput   = document.getElementById('fc');
+        const fcDateInput = document.getElementById('fc_date');
+        const fcTags    = document.getElementById('fc-tags');
+        const dateTags    = document.getElementById('date-tags');
+        const fcError   = document.getElementById('fc-client-error');
+        const fcDateError = document.getElementById('fc-date-error');
+        const addDateBtn  = document.getElementById('add-date-btn');
+        const form      = document.getElementById('forecast-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const loading   = document.getElementById('loading');
+
+        const dateEntries = [];
+
+        function parseFcValues(raw) {
+            return raw.split(',')
+                      .map(s => s.trim())
+                      .filter(s => s.length > 0);
+        }
+
+        function validateFc(raw) {
+            const parts = parseFcValues(raw);
+            if (parts.length === 0 && dateEntries.length === 0) return 'Please enter at least one forecast time or add at least one date.';
+            for (const p of parts) {
+                const n = Number(p);
+                if (isNaN(n) || n < 1) return `"${p}" is not a valid number ≥ 1.`;
+            }
+            return null;
+        }
+
+        function renderTags(raw) {
+            const parts = parseFcValues(raw);
+            fcTags.innerHTML = parts
+                .filter(p => p.length > 0 && !isNaN(Number(p)) && Number(p) >= 1)
+                .map(p => `<span class="tag">${Number(p).toLocaleString()} days</span>`)
+                .join('');
+
+            dateTags.innerHTML = dateEntries
+                .map(entry => `<span class="tag">${entry.days.toLocaleString()} days (${entry.date})</span>`)
+                .join('');
+        }
+
+        function daysFromToday(dateString) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const target = new Date(dateString + 'T00:00:00');
+            target.setHours(0, 0, 0, 0);
+
+            return Math.round((target - today) / 86400000);
+        }
+
+        function addDaysValue(days) {
+            const current = parseFcValues(fcInput.value).map(Number).filter(n => !isNaN(n) && n >= 1);
+            current.push(days);
+
+            const uniqueSorted = [...new Set(current)].sort((a, b) => a - b);
+            fcInput.value = uniqueSorted.join(', ');
+            fcError.textContent = '';
+            renderTags(fcInput.value);
+        }
+
+        fcInput.addEventListener('input', () => {
+            const err = validateFc(fcInput.value);
+            fcError.textContent = err ?? '';
+            renderTags(fcInput.value);
+        });
+
+        addDateBtn.addEventListener('click', () => {
+            fcDateError.textContent = '';
+
+            if (!fcDateInput.value) {
+                fcDateError.textContent = 'Please choose a date first.';
+                return;
+            }
+
+            const days = daysFromToday(fcDateInput.value);
+            if (days < 1) {
+                fcDateError.textContent = 'Please choose a future date.';
+                return;
+            }
+
+            const exists = dateEntries.some(e => e.date === fcDateInput.value);
+            if (!exists) {
+                dateEntries.push({ date: fcDateInput.value, days: days });
+                addDaysValue(days);
+            }
+
+            fcDateInput.value = '';
+        });
+
+        // Initial render in case the field is pre-filled by Jinja
+        renderTags(fcInput.value);
+
+        form.addEventListener('submit', function (e) {
+            const err = validateFc(fcInput.value);
+            if (err) {
+                e.preventDefault();
+                fcError.textContent = err;
+                fcInput.focus();
+                return;
+            }
+            submitBtn.disabled = true;
+            loading.classList.add('visible');
+        });
+    </script>
+</body>
+</html>
+
