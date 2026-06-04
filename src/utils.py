@@ -1,6 +1,17 @@
 #!/usr/bin/python3
 import logging
+import datetime
+import zoneinfo
 
+
+
+class LocalTimeFormatter(logging.Formatter):
+    def format(self, record, datefmt=None):
+        tz = zoneinfo.ZoneInfo('Europe/Zurich')
+        dt = datetime.datetime.fromtimestamp(record.created, tz=tz)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.isoformat(timespec='seconds')
 
 
 def get_logger(name):
@@ -10,7 +21,8 @@ def get_logger(name):
 
     if not logger.handlers:
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        formatter = LocalTimeFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
         logger.addHandler(handler)
 
     return logger
