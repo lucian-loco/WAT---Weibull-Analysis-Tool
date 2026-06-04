@@ -6,12 +6,11 @@ import zoneinfo
 
 
 class LocalTimeFormatter(logging.Formatter):
-    def format(self, record, datefmt=None):
+    def format(self, record):
         tz = zoneinfo.ZoneInfo('Europe/Zurich')
         dt = datetime.datetime.fromtimestamp(record.created, tz=tz)
-        if datefmt:
-            return dt.strftime(datefmt)
-        return dt.isoformat(timespec='seconds')
+        record.asctime = dt.strftime('%Y-%m-%d %H:%M:%S')
+        return super().format(record)
 
 
 def get_logger(name):
