@@ -627,7 +627,7 @@ _weibull_forecast_cache = None
 _forecast_cache_lock = threading.Lock()
 
 
-def refresh_analysis_cache(sort_by='CV', ci=0.95, delta_ic=0.1):
+def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
     """
     Pre-compute Weibull model selection for every cached part using the
     default parameters that route_weibull_plot and route_reliability_plot use.
