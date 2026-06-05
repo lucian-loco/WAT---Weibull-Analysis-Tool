@@ -595,8 +595,6 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
         else:
             exclude = base_exclude
 
-    logger.info(f'[{part}] starting with actual Fit_Everything...')
-
     try:
         wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
                             sort_by=sort_by,
@@ -606,8 +604,6 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
                             method='MLE', optimizer='Best')
     except Exception as e:
         raise RuntimeError(f'Weibull fitting all distributions failed for "{part}": {e}')
-
-    logger.info(f'[{part}] Fit_Everything was successful.')
 
     wb_data_fit_all = wb.results
     wb_best_distribution_name = wb.best_distribution_name
@@ -655,24 +651,17 @@ def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
             sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
             fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
 
-            logger.info(f'[{part}] weibull_fit_best was successful.')
-
             best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
-
-            logger.info(f'[{part}] compare_best_distribution was successful.')
 
             new_cache[part] = {'best_model': best_model,
                                'fit_table': fit_table,
                                'data': data}
-
-            logger.info(f'[{part}] saved in new_cache. Continuing with next part...')
 
         except Exception as e:
             errors[part] = str(e)
             logger.warning(f'Analysis cache: skipped "{part}": {e}')
 
     with _analysis_cache_lock:
-        logger.info(f'Saving the cache in global variable.')
         _weibull_analysis_cache = new_cache
         _analysis_cache_timestamp = datetime.datetime.now(tz=ZoneInfo('Europe/Zurich'))
 
