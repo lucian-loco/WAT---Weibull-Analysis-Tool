@@ -153,7 +153,7 @@ def plot_settings_sf(xmax):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
+def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -193,7 +193,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
     except Exception as e:
         raise RuntimeError(f'Weibull 2P fitting failed for "{part}": {e}')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} using {selection_method} as selection method with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax_new = plot_settings(wb)
 
     if return_sf:
@@ -205,7 +205,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
+        plt.title(f'Reliability plot for {part} using {selection_method} as selection method with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, CI={ci:.3f})')
         plot_settings_sf(xmax=xmax_new)
 
     if save_path:
@@ -221,7 +221,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull 3P
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
+def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -261,7 +261,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
     except Exception as e:
         raise RuntimeError(f'Weibull 3P fitting failed for "{part}": {e}')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} using {selection_method} as selection method with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax_new = plot_settings(wb)
     ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
 
@@ -274,7 +274,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plt.title(f'Reliability plot for {part} with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
+        plt.title(f'Reliability plot for {part} using {selection_method} as selection method with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
         plot_settings_sf(xmax=xmax_new)
 
     if save_path:
@@ -290,7 +290,7 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
+def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -344,7 +344,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if xvals_ext is not None and len(xvals_ext) > 1:
         wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} using {selection_method} as selection method with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -359,7 +359,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
+        plt.title(f'Reliability plot for {part} using {selection_method} as selection method with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, \n proportion_factor={wb.proportion_1:.3f}, CI={ci:.3f})')
         ax = plot_settings_sf(xmax=xmax_rel)
         lines = ax.get_lines()
         # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
@@ -413,7 +413,7 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False):
 #-----------------------------------------------------------------------------------------------------------------------
 # Function for Weibull Competing Risks with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
+def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -467,7 +467,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
     if xvals_ext is not None and len(xvals_ext) > 1:
         wb.distribution.CDF(xvals=xvals_ext, color=plt.gca().get_lines()[-1].get_color(), label='_nolegend_')
 
-    plt.title(f'Weibull Probability Plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
+    plt.title(f'Weibull Probability Plot for {part} using {selection_method} as selection method with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax = plot_settings(wb)
     xmin_rel, xmax_rel = xmin * 0.8, xmax * 1.2
 
@@ -482,7 +482,7 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False):
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
-        plt.title(f'Reliability plot for {part} with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
+        plt.title(f'Reliability plot for {part} using {selection_method} as selection method with \n (α₁={wb.alpha_1:.4f}, β₁={wb.beta_1:.4f}, α₂={wb.alpha_2:.4f}, β₂={wb.beta_2:.4f}, CI={ci:.3f})')
         ax = plot_settings_sf(xmax=xmax_rel)
         lines = ax.get_lines()
         # lines[-3] = Weibull 1 component, lines[-2] = Weibull 2 component, lines[-1] = Mixture model
@@ -651,11 +651,13 @@ def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
             sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
             fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
 
-            best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
+            best_model, cv_used = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
 
             new_cache[part] = {'best_model': best_model,
                                'fit_table': fit_table,
-                               'data': data}
+                               'data': data,
+                               'cv_used': cv_used
+            }
 
         except Exception as e:
             errors[part] = str(e)
@@ -799,17 +801,20 @@ def manual_weibull(part, return_sf=False, delta=0.1):
 
     sort_by = ask_sort_by(default='BIC')
     ci = ask_ci(default=0.95)
+    ic_fallback = 'BIC'
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
     wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
+    compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta)
 
-    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
-                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
-                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf),
-                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf)}
+    selection_used = 'CV' if cv_used else ic_fallback
+
+    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=None, data=data, return_sf=return_sf, selection_method=selection_used)}
 
     fit_function = fitter_map.get(compared_best)
 
@@ -834,6 +839,8 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
     buffer = io.BytesIO()   # Save plot in RAM
     
     analysis_cache = get_analysis_cache()
+
+    ic_fallback = 'BIC'
     
     # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
     using_cached_analysis = (sort_by == 'CV')
@@ -842,6 +849,7 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
         cached = analysis_cache[part]
         compared_best = cached['best_model']
         data = cached['data']
+        cv_used = cached['cv_used']
         logger.debug(f'generate_graph: cache available for "{part}".')
     else:
         # Only recompute if sort_by differs from default
@@ -851,12 +859,14 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 
         wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
-        compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
+        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=0.1)
 
-    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
-                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
-                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf),
-                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf)}
+    selection_used = 'CV' if cv_used else ic_fallback
+
+    fitter_map = {'Weibull_2P': lambda p: weibull_2p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_3P': lambda p: weibull_3p(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_Mixture': lambda p: weibull_mixture(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf, selection_method=selection_used),
+                  'Weibull_CR': lambda p: weibull_cr(part=p, ci=ci, save_path=buffer, data=data, return_sf=return_sf, selection_method=selection_used)}
 
     fit_function = fitter_map.get(compared_best)
 
