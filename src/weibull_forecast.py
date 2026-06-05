@@ -617,10 +617,10 @@ if __name__ == '__main__':
     data = get_failures_and_suspensions()
 
     sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
-    fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
-    best_model = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=0.1)
+    fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data[part])
+    best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data[part], ic_fallback='BIC', delta=0.1)
 
-    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table= fit_table, best_model=best_model, data=data, CI=ci)
+    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data, CI=ci)
 
     print_forecast(forecast, CI=ci)
     print(forecast_to_dataframe(forecast).to_string(index=False))

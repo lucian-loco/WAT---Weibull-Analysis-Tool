@@ -30,6 +30,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
               - If AICc and BIC winners agree → that distribution.
               - Else → use ic_fallback column ('AICc' or 'BIC').
     """
+    cv_used = False
     df = df.reset_index(drop=True).copy()
 
     required_cols = {'Distribution', 'AICc', 'BIC'}
@@ -116,7 +117,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                       f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
                       f'parsimony did not change the winner.')
 
-        return final_winner
+        return final_winner, cv_used
 
     # 3) Decide mode based on sort_by
     if sort_by == "CV":
@@ -125,11 +126,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
-            logger.info(f'[{part}] Starting now with Cross-Validation for this part.')
-
             cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta)
-
-            logger.info(f'[{part}] Ended with Cross-Validation for this part.')
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
@@ -137,7 +134,8 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                     if winner_cv not in strong_both:
                         print(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
                               f'of AICc and BIC (ΔAICc / ΔBIC ≥ 2). Please check the fit carefully.')
-                    return winner_cv
+                    cv_used = True
+                    return winner_cv, cv_used
                 else:
                     # If data is None or CV not feasible → fall back
                     print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but returned no parsimonious winner.')
@@ -342,7 +340,6 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # ------------------------------------------------------------------
     # 3. Fold loop
     # ------------------------------------------------------------------
-    logger.info(f'[{part}] starting with loop for Cross-Validation...')
     for train_idx, val_idx in skf.split(all_train_data, status_labels):
 
         # Early failures always in training
@@ -411,7 +408,6 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
         # ------------------------------------------------------------------
         # 3b. Compute robust NLL for validation
         # ------------------------------------------------------------------
-        logger.info(f'[{part}] starting with computation of NLL for validation...')
         for name in model_names:
             model = models.get(name)
             if model is not None and hasattr(model, "distribution"):
@@ -532,8 +528,6 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
                   "Weibull_Mixture": 5}
 
     final_model = min(equivalent_group, key=lambda m: complexity.get(m, np.inf))
-
-    logger.info(f'[{part}] final model is selected.')
 
     # Feedback: did parsimony change the CV winner?
     parsimony_changed = (final_model != best_name)
