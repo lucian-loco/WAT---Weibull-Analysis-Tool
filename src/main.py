@@ -26,25 +26,25 @@ build_date = os.environ.get('APP_BUILD_DATE', 'unknown')
 commit_hash = os.environ.get('APP_GIT_COMMIT', 'unknown')
 
 
-# def refresh_all():
-#     """Full refresh chain: data → model selection → forecast of expected failures"""
-#     refresh_cache()             # 1. Pull from DB
-#     refresh_analysis_cache()    # 2. Model selection with CV (default)
-#     refresh_forecast_cache()    # 3. Expected failure forecasts
-#     try:
-#         reliability_summary_table()
-#     except RuntimeError as e:
-#         return 'Reliability table could not be generated in confluence: ' + str(e), 400
-#
-#
-# if weibull_cache_enabled:
-#     refresh_all()
-#
-#     scheduler = BackgroundScheduler()
-#     scheduler.add_job(refresh_all, 'cron', hour=1, minute=0)
-#     scheduler.start()
-#
-#     atexit.register(lambda: scheduler.shutdown())
+def refresh_all():
+    """Full refresh chain: data → model selection → forecast of expected failures"""
+    refresh_cache()             # 1. Pull from DB
+    refresh_analysis_cache()    # 2. Model selection with CV (default)
+    refresh_forecast_cache()    # 3. Expected failure forecasts
+    try:
+        reliability_summary_table()
+    except RuntimeError as e:
+        return 'Reliability table could not be generated in confluence: ' + str(e), 400
+
+
+if weibull_cache_enabled:
+    refresh_all()
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(refresh_all, 'cron', hour=1, minute=0)
+    scheduler.start()
+
+    atexit.register(lambda: scheduler.shutdown())
 
 
 # TODO not very elegant, think of a better way
