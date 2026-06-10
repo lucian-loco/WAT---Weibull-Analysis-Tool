@@ -101,21 +101,21 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
         if best_aicc == best_bic:
             # AICc and BIC agree numerically
             if parsimony_changed:
-                print(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
-                      f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
+                logger.info(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                            f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
             else:
-                print(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
-                      f'and parsimony kept the same model.')
+                logger.info(f'[{part}]: AICc and BIC agree on numeric best → {ic_numeric_winner}, '
+                            f'and parsimony kept the same model.')
         else:
             # AICc and BIC disagree → we used primary_col as the IC basis
             if parsimony_changed:
-                print(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
-                      f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
-                      f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
+                logger.info(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                            f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
+                            f'but Δ{primary_col}<=2 and parsimony selected simpler model → {final_winner}.')
             else:
-                print(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
-                      f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
-                      f'parsimony did not change the winner.')
+                logger.info(f'[{part}]: ⚠ AICc → {best_aicc} vs BIC → {best_bic}: disagreement, '
+                            f'using "{primary_col}". Numeric {primary_col} best → {ic_numeric_winner}, '
+                            f'parsimony did not change the winner.')
 
         return final_winner, cv_used
 
@@ -132,18 +132,18 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
                 if winner_cv is not None:
                     if winner_cv not in strong_both:
-                        print(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
-                              f'of AICc and BIC (ΔAICc / ΔBIC ≥ 2). Please check the fit carefully.')
+                        logger.info(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
+                                    f'of AICc and BIC (ΔAICc / ΔBIC ≥ 2). Please check the fit carefully.')
                     cv_used = True
                     return winner_cv, cv_used
                 else:
                     # If data is None or CV not feasible → fall back
-                    print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but returned no parsimonious winner.')
+                    logger.info(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but returned no parsimonious winner.')
             else:
-                print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but no model had finite avg NLL '
-                      f'(all models infeasible or all folds failed).')
+                logger.info(f'[{part}]: ⚠ CV fallback → {ic_fallback}: CV ran but no model had finite avg NLL '
+                            f'(all models infeasible or all folds failed).')
         else:
-            print(f'[{part}]: ⚠ CV fallback → {ic_fallback}: no raw data provided (data=None).')
+            logger.info(f'[{part}]: ⚠ CV fallback → {ic_fallback}: no raw data provided (data=None).')
 
         return _select_by_ic(ic_fallback)
 
