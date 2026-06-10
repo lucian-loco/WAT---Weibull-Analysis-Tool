@@ -62,6 +62,7 @@
                 <th>Lower bound</th>
                 <th>Upper bound</th>
                 <th>Standard error</th>
+                <th>Variance</th>
             </tr>
         </thead>
         <tbody>
@@ -75,6 +76,7 @@
                 <td>{% if r.lower_bound is not none %}{{ "%.1f" | format(r.lower_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
                 <td>{% if r.upper_bound is not none %}{{ "%.1f" | format(r.upper_bound) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
                 <td>{% if r.standard_error is not none %}{{ "%.4f" | format(r.standard_error) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
+                <td>{% if r.variance is not none %}{{ "%.4f" | format(r.variance) }}{% else %}<span class="na">N/A</span>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
