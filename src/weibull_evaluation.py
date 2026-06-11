@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 import numpy as np
 import pandas as pd
-# from scipy import stats
 from utils import DataError, ThresholdError, NoCacheError
 from sklearn.model_selection import RepeatedStratifiedKFold
 from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture
