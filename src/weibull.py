@@ -61,10 +61,48 @@ def sci_formatter(x, pos):
         return f'$10^{{{exp}}}$'
     return f'${coeff:.4g}\\times10^{{{exp}}}$'
 
+DAYS_PER_YEAR = 365.25
+def years_formatter(x, pos):
+    if x == 0:
+        return '0'
 
-def plot_settings(fit, upper_quantile=0.999):
+    years = x / DAYS_PER_YEAR
+
+    if years >= 1000 or years < 0.1:
+        exp = int(np.floor(np.log10(abs(years))))
+        coeff = years / 10**exp
+        if abs(coeff - 1.0) < 0.01:
+            return f'$10^{{{exp}}}$'
+        return f'${coeff:.3g}\\times10^{{{exp}}}$'
+
+    if years >= 10:
+        return f'{years:.0f}'
+    if years >= 1:
+        return f'{years:.1f}'
+    return f'{years:.2f}'
+
+
+def make_minor_year_label_formatter(decade_span):
+    def _minor_label_formatter(x, pos):
+        if decade_span > 2.9 or x <= 0:
+            return ''
+
+        years = x / DAYS_PER_YEAR
+        log = np.floor(np.log10(years))
+        mantissa = round(years / (10 ** log), 1)
+
+        if mantissa == 2.0:
+            return f'$2 \\times 10^{{{int(log)}}}$'
+        if mantissa == 5.0:
+            return f'$5 \\times 10^{{{int(log)}}}$'
+        return ''
+
+    return _minor_label_formatter
+
+
+def plot_settings(fit, upper_quantile=0.99):
     ax = plt.gca()
-    ax.set_xlabel('Time in days')
+    ax.set_xlabel('Time in years')
     ax.set_ylabel('Failure probability')
     plt.legend(loc='upper left')
     ax.set_ylim(0.001, 0.999)
@@ -78,7 +116,9 @@ def plot_settings(fit, upper_quantile=0.999):
 
     ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=6))
     ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs='auto', numticks=10))
-    ax.xaxis.set_minor_formatter(FuncFormatter(make_minor_label_formatter(decade_span)))
+    ax.xaxis.set_major_formatter(FuncFormatter(years_formatter))
+    ax.xaxis.set_minor_formatter(FuncFormatter(make_minor_year_label_formatter(decade_span)))
+    # ax.xaxis.set_minor_formatter(FuncFormatter(make_minor_label_formatter(decade_span)))
 
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
@@ -119,7 +159,7 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
 
 def plot_settings_sf(xmax):
     ax = plt.gca()
-    ax.set_xlabel('Time in days')
+    ax.set_xlabel('Time in years')
     ax.set_ylabel('Reliability / survival probability')
     ax.yaxis.set_major_locator(MultipleLocator(0.1))
     ax.grid(True, which='major', linestyle='--', linewidth=0.6, alpha=0.7, color='gray')
@@ -129,7 +169,8 @@ def plot_settings_sf(xmax):
     ax.set_ylim(0, 1.05)
     ax.set_xlim(0, xmax)
 
-    ax.xaxis.set_major_formatter(FuncFormatter(sci_formatter))
+    ax.xaxis.set_major_formatter(FuncFormatter(years_formatter))
+    # ax.xaxis.set_major_formatter(FuncFormatter(sci_formatter))
 
     fig = plt.gcf()
     fig.set_size_inches(9.5, 6)
@@ -201,7 +242,7 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False, select
         plt.figure()
 
         try:
-            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new * 1.2, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
+            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
@@ -263,14 +304,14 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False, select
 
     plt.title(f'Weibull Probability Plot for {part} using {selection_method} as selection method with \n (α={wb.alpha:.4f}, β={wb.beta:.4f}, γ={wb.gamma:.4f}, CI={ci:.3f})')
     ax, fig, xmin, xmax_new = plot_settings(wb)
-    ax.set_xlabel(f'Time in days minus failure free time γ={wb.gamma:.4f}')
+    ax.set_xlabel(f'Time in years minus failure free time γ={wb.gamma / DAYS_PER_YEAR:.3f}')
 
     if return_sf:
         plt.close()
         plt.figure()
 
         try:
-            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new * 1.2, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
+            wb_sf = wb.distribution.SF(xmin=0, xmax=xmax_new, show_plot=True, plot_CI=plot_CI, CI_type=ci_type, CI=ci)
         except Exception as e:
             raise RuntimeError(f'Creating the survival function failed for "{part}": {e}')
 
