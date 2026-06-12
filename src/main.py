@@ -210,6 +210,60 @@ def route_forecast_form():
     return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95}, today_iso=date.today().isoformat())
 
 
+@app.route('/weibull_fixed', methods=['GET', 'POST'])
+def route_weibull_fixed():
+    part = request.args.get('part')
+    plot_type = request.args.get('plot_type')
+    edit = request.args.get('edit', '0') == '1'
+
+    if not part:
+        return 'Parameter "part" not valid or is missing', 400
+
+    if plot_type not in ('CDF', 'SF'):
+        return 'Parameter "plot_type" must be "CDF" or "SF"', 400
+
+    errors = {}
+    defaults = {'sort_by': 'CV', 'ci': 0.95}
+    return_sf = (plot_type == 'SF')
+
+    if request.method == 'POST':
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
+        if err:
+            errors['sort_by'] = err
+
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
+        if err:
+            errors['ci'] = err
+
+        defaults = {'sort_by': request.form.get('sort_by', 'CV'),
+                    'ci': request.form.get('ci', '0.95')
+        }
+
+        if errors:
+            return render_template('weibull_form_fixed.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
+
+        try:
+            graph = generate_graph(part=part, sort_by=sb, ci=ci, return_sf=return_sf)
+        except RuntimeError as e:
+            return 'Weibull plot cannot be generated: ' + str(e), 400
+
+        image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
+
+        return render_template('weibull_results_fixed.html', part=part, plot_type=plot_type, sort_by=sb, ci=ci, image_b64=image_b64)
+
+    if edit:
+        return render_template('weibull_form_fixed.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
+
+    try:
+        graph = generate_graph(part=part, sort_by='CV', ci=0.95, return_sf=return_sf)
+    except RuntimeError as e:
+        return 'Weibull plot cannot be generated: ' + str(e), 400
+
+    image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
+
+    return render_template('weibull_results_fixed.html', part=part, plot_type=plot_type, sort_by='CV', ci=0.95, image_b64=image_b64)
+
+
 @app.route('/crate/new')
 def route_crate_new():
     drawio_libs = get_drawio_lib_urls()
