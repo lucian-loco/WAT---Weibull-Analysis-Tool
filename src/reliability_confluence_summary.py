@@ -29,7 +29,7 @@ def format_value_for_confluence(value: Any) -> str:
     """
     Format a value for display in Confluence table.
 
-    - Converts None to empty string
+    - Converts None to "-" string
     - Converts all values to strings (Python does this automatically in f-strings)
 
     Args:
@@ -38,35 +38,19 @@ def format_value_for_confluence(value: Any) -> str:
     Returns:
         String formatted for Confluence HTML table
     """
-    if value is None:
-        return ""
+    if value is None or pd.isna(value):
+        return "-"
 
     if isinstance(value, float):
-        if pd.isna(value):
-            return ""
+        return html.escape(f"{value:.1f}", quote=True)
 
-    # Convert to string
-    value_str = str(value)
+    if isinstance(value, int):
+        return html.escape(str(value), quote=True)
 
-    # Simple version (no color-coding):
-    return html.escape(value_str, quote=True)
+    return html.escape(str(value), quote=True)
 
 
-def format_forecast_cell(fr):
-    if fr is None:
-        return "Not available"
-
-    lower = fr.get("lower_bound")
-    expected = fr.get("expected_failures")
-    upper = fr.get("upper_bound")
-
-    if lower is None or expected is None or upper is None:
-        return "Not available"
-
-    return f"Upper: {upper:.1f}<br/>Expected: {expected:.1f}<br/>Lower: {lower:.1f}"
-
-
-def make_html_table(f, rows, html_columns=None):
+def make_html_table(f, rows):
     """
     Create HTML table exactly like your colleague's wrenscan.py
 
@@ -74,7 +58,6 @@ def make_html_table(f, rows, html_columns=None):
         f: File-like object to write to (e.g., io.StringIO())
         rows: List of dictionaries with table data
     """
-    html_columns = set(html_columns or [])
 
     if not rows:
         f.write("<p>No data available. Query to data base was not successful.</p>\n")
@@ -84,19 +67,16 @@ def make_html_table(f, rows, html_columns=None):
 
     f.write("<table><thead>\n<tr>")
     for col in columns:
-        f.write(f"<th>{col}</th>")
-
+        f.write(f"<th>{format_value_for_confluence(col)}</th>")
     f.write("</tr>\n</thead><tbody>\n")
+
     for row in rows:
         f.write("<tr>")
         for col in columns:
-            value = row.get(col)
-            if col in html_columns:
-                cell = "" if value is None else str(value)
-            else:
-                cell = format_value_for_confluence(row.get(col))
-            f.write(f"<td>{cell or ''}</td>")
+            cell = format_value_for_confluence(row.get(col))
+            f.write(f"<td>{cell}</td>")
         f.write("</tr>\n")
+
     f.write("</tbody></table>\n")
 
 
@@ -108,11 +88,20 @@ def build_forecast_lookup(forecast_results):
     return lookup
 
 
+def delta_label(d):
+    years = int(d / 365)
+    return f"{years} year" if years == 1 else f"{years} years"
+
+
 def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
     out = df_query.copy()
 
+    # Create 3 columns per delta
     for d in deltas:
-        out[f"EXPECTED FAILURES +{int(d)} Days"] = "Not available"
+        label = delta_label(d)
+        out[f"EXPECTED FAILURES +{label} UPPER"] = None
+        out[f"EXPECTED FAILURES +{label} EXPECTED"] = None
+        out[f"EXPECTED FAILURES +{label} LOWER"] = None
 
     for idx, row in out.iterrows():
         part = row["EQUIPMENT CODE"]
@@ -126,7 +115,16 @@ def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
             if fr is None:
                 continue
 
-            out.at[idx, f"EXPECTED FAILURES +{int(d)} Days"] = format_forecast_cell(fr)
+            label = delta_label(d)
+
+            col = f"EXPECTED FAILURES +{label} UPPER"
+            out.at[idx, col] = fr.get("upper_bound")
+
+            col = f"EXPECTED FAILURES +{label} EXPECTED"
+            out.at[idx, col] = fr.get("expected_failures")
+
+            col = f"EXPECTED FAILURES +{label} LOWER"
+            out.at[idx, col] = fr.get("lower_bound")
 
     return out
 
@@ -145,7 +143,7 @@ def reliability_summary_table():
     SPACE_KEY = "HWI"  # Confluence space key
     ANCESTOR_ID = "470357223"  # parent page ID
     PAGE_TITLE = "Summary of Reliability Data"  # page title
-    FORECAST_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0]
+    FORECAST_DELTAS = [365.0, 1825.0]
 
     # SQL query
     SQL_QUERY = """select OBJ_PART "EQUIPMENT CODE", OBJ_DESC "DESCRIPTION", 
@@ -175,7 +173,13 @@ def reliability_summary_table():
 
         df_final = enrich_query_rows_with_forecast(df_query, forecast_lookup, FORECAST_DELTAS)
 
-        forecast_cols = [f"EXPECTED FAILURES +{int(d)} Days" for d in FORECAST_DELTAS]
+        forecast_cols = []
+        for d in FORECAST_DELTAS:
+            label = delta_label(d)
+            forecast_cols.extend([f"EXPECTED FAILURES +{label} UPPER",
+                                  f"EXPECTED FAILURES +{label} EXPECTED",
+                                  f"EXPECTED FAILURES +{label} LOWER"
+            ])
 
         before_forecast = ["EQUIPMENT CODE",
                            "DESCRIPTION",
@@ -235,7 +239,7 @@ def reliability_summary_table():
     # fmt: on
 
     # Add the table
-    make_html_table(f, table_rows, html_columns=forecast_cols)
+    make_html_table(f, table_rows)
 
     c = Confluence(confluence_token)
     c.insert_or_update_page(space_key=SPACE_KEY, ancestor_id=ANCESTOR_ID, title=PAGE_TITLE, content=f.getvalue())

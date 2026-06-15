@@ -479,7 +479,7 @@ def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, C
                                             }
 
 
-def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_errors=True, return_dataframe=False):
+def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_errors=True, return_dataframe=False, data_prepared=None):
     """
     Run the direct-delta forecast for every part available in cached Weibull data.
 
@@ -512,8 +512,12 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
         If return_dataframe=True:
             concatenated DataFrame for all successful parts.
     """
-    data_all = get_failures_and_suspensions(part=None)
-    part_names = list(data_all.keys())
+    if cached_results is None:
+        data_all = get_failures_and_suspensions(part=None)
+        part_names = list(data_all.keys())
+    else:
+        part_names = list(cached_results.keys())
+        data_all = data_prepared
 
     results = {}
     errors = {}
