@@ -664,7 +664,7 @@ _weibull_forecast_cache = None
 _forecast_cache_lock = threading.Lock()
 
 
-def refresh_analysis_cache(sort_by='CV', delta_ic=0.1):
+def refresh_analysis_cache(sort_by='CV', delta_ic=0.466):
     """
     Pre-compute Weibull model selection for every cached part using the
     default parameters that route_weibull_plot and route_reliability_plot use.
@@ -762,7 +762,7 @@ def get_forecast_cache():
 
 
 # ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
-def automated_weibull(save_path=None, return_sf=False, delta=0.1):
+def automated_weibull(save_path=None, return_sf=False, delta=0.466):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='BIC')
@@ -836,7 +836,7 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.1):
 #-----------------------------------------------------------------------------------------------------------------------
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
-def manual_weibull(part, return_sf=False, delta=0.1):
+def manual_weibull(part, return_sf=False, delta=0.466):
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -900,7 +900,7 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 
         wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
-        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=0.1)
+        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=0.466)
 
     selection_used = 'CV' if cv_used else ic_fallback
 

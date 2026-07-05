@@ -622,7 +622,7 @@ if __name__ == '__main__':
 
     sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
     fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data[part])
-    best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data[part], ic_fallback='BIC', delta=0.1)
+    best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data[part], ic_fallback='BIC', delta=0.466)
 
     forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data, CI=ci)
 

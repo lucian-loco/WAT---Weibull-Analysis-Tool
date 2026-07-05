@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 # ToDo: Tune the delta factor
 # ToDo: Make the feedback messages passing upwards for the webtool in the end!
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.1):
+def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.466):
     """
     Central model selection.
 
@@ -188,7 +188,7 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     return sorted(allowed)
 
 
-def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.1) -> dict:
+def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.466) -> dict:
     """
     Repeated Stratified K-Fold CV on Weibull 2P, 3P, Competing Risk, and Mixture models.
 
