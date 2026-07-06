@@ -8,7 +8,7 @@ from utils import get_logger
 logger = get_logger(__name__)
 
 
-# ToDo: Tune the delta factor
+
 # ToDo: Make the feedback messages passing upwards for the webtool in the end!
 def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.466):
     """
@@ -31,6 +31,8 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
     """
     cv_used = False
     df = df.reset_index(drop=True).copy()
+
+    n_total_failures = len(np.asarray(data['failures'])) if data is not None else None
 
     required_cols = {'Distribution', 'AICc', 'BIC'}
     missing = required_cols - set(df.columns)
@@ -57,6 +59,36 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
                   "Weibull_3P": 3,
                   "Weibull_CR": 4,
                   "Weibull_Mixture": 5}
+
+    def _mixture_is_valid(df: pd.DataFrame, n_total_failures: int, part: str) -> bool:
+        """
+        Rejects a Weibull_Mixture winner if either subpopulation's estimated
+        proportion covers fewer than 3 failures, or if the proportion is
+        outside the [1%, 99%] range.
+        """
+        mix_rows = df.loc[df['Distribution'] == 'Weibull_Mixture']
+        if mix_rows.empty:
+            return True
+
+        row = mix_rows.iloc[0]
+
+        if 'Proportion 1' not in df.columns:
+            logger.warning(f'[{part}]: Weibull_Mixture validity check skipped — "Proportion 1" column not found in results table.')
+            return True
+
+        p1 = float(row['Proportion 1'])
+        p2 = 1.0 - p1
+
+        for p in (p1, p2):
+            if p < 0.01 or p > 0.99:
+                logger.info(f'[{part}]: Weibull_Mixture rejected — proportion {p:.4f} outside [1%, 99%] range.')
+                return False
+            est_failures = p * n_total_failures
+            if est_failures < 3:
+                logger.info(f'[{part}]: Weibull_Mixture rejected — proportion {p:.4f} estimated to cover only {est_failures:.2f} failures (<3).')
+                return False
+
+        return True
 
     # Helper: IC selection with parsimony (Δ <= 2)
     def _select_by_ic(fallback_col: str):
@@ -94,6 +126,27 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             # 4) Parsimony: choose simplest model among candidates
             final_winner = min(candidate_dists, key=lambda d: complexity.get(d, np.inf))
 
+        if final_winner == 'Weibull_Mixture' and n_total_failures is not None and not _mixture_is_valid(df, n_total_failures, part):
+            df_no_mix = df.loc[df['Distribution'] != 'Weibull_Mixture']
+
+            if df_no_mix.empty:
+                # No other model available at all -> keep mixture as last resort
+                pass
+            else:
+                # Recompute the IC minimum and Δ<=2 support set WITHOUT Mixture
+                min_ic_no_mix = df_no_mix[primary_col].min()
+                delta_no_mix = df_no_mix[primary_col] - min_ic_no_mix
+                candidate_dists_no_mix = df_no_mix.loc[delta_no_mix <= 2.0, 'Distribution'].tolist()
+
+                if candidate_dists_no_mix:
+                    final_winner = min(candidate_dists_no_mix, key=lambda d: complexity.get(d, np.inf))
+                else:
+                    # Should not happen, but fall back to numeric best excluding Mixture
+                    final_winner = df_no_mix.at[df_no_mix[primary_col].idxmin(), 'Distribution']
+
+            logger.info(f'[{part}]: Weibull_Mixture rejected as winner (proportion rule violated). Re-ran Δ{primary_col}<=2 & parsimony '
+                        f'on remaining models → {final_winner}.')
+
         # 5) Feedback message
         parsimony_changed = (final_winner != ic_numeric_winner)
 
@@ -129,6 +182,22 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
+
+                if winner_cv == 'Weibull_Mixture' and not _mixture_is_valid(df, len(failures), part):
+                    avg_nll = cv_results.get("avg_cv_nll", {})
+                    valid_no_mix = {m: v for m, v in avg_nll.items() if m != 'Weibull_Mixture' and np.isfinite(v)}
+
+                    if valid_no_mix:
+                        best_no_mix = min(valid_no_mix, key=valid_no_mix.get)
+                        best_nll_no_mix = valid_no_mix[best_no_mix]
+                        equiv_no_mix = [m for m in valid_no_mix if valid_no_mix[m] - best_nll_no_mix <= delta]
+                        winner_cv = min(equiv_no_mix, key=lambda d: complexity.get(d, np.inf))
+                        logger.info(f'[{part}]: CV winner Weibull_Mixture rejected (proportion rule violated). '
+                                    f'Re-ran delta<={delta} equivalence & parsimony '
+                                    f'on remaining models → {winner_cv}.')
+                    else:
+                        winner_cv = None
+
                 if winner_cv is not None:
                     if winner_cv not in strong_both:
                         logger.info(f'[{part}]: ⚠ CV winner "{winner_cv}" is NOT in strong-support set '
