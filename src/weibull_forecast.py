@@ -42,15 +42,94 @@ import pandas as pd
 import scipy.stats
 import autograd
 import autograd.numpy as anp
-from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture
+from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, Fit_Weibull_Mixture, Fit_Everything
 from data_weibull import get_failures_and_suspensions
 from weibull_ci import _compute_covariance
-from utils import get_logger, DataError
-from weibull import weibull_fit_best
+from utils import get_logger, DataError, ThresholdError
 from weibull_evaluation import compare_best_distribution
 
 logger = get_logger(__name__)
 
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Function for fitting the data to every available Weibull distribution | This function is important because the import from weibull.py is not possible!
+#-----------------------------------------------------------------------------------------------------------------------
+def weibull_fit_best(part, sort_by='BIC', data=None):
+    if not part:
+        raise RuntimeError('Invalid request ("part" not specified)')
+
+    warnings.filterwarnings("ignore", category=FutureWarning, message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated")
+
+    if data is None:
+        data = get_failures_and_suspensions(part)
+
+    failure_size = len(data['failures'])
+    distinct_failure_count = len(set(data['failures']))
+    # suspension_size = len(data['suspensions'])
+    # sample_size = failure_size + suspension_size
+
+    if failure_size < 2:
+        raise ThresholdError('Not enough failures (more than 2) to perform Weibull in data for "{0}"'.format(part))
+
+    # Prevent zeros in the right censored data
+    if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
+        data['suspensions'] = [t for t in data['suspensions'] if t > 0]
+        with warnings.catch_warnings():
+            warnings.simplefilter('always', UserWarning)
+            warnings.warn(f'The suspension data contained zeros as running_time. These assets have been ignored. Data need to be checked for {part}.', UserWarning)
+
+    if data.get('suspensions') is None or len(data['suspensions']) == 0:
+        data['suspensions'] = None
+
+    # Weibull Analysis
+    # see https://reliability.readthedocs.io/en/latest/API/Fitters.html for parameters description
+
+    base_exclude = ['Weibull_DS', 'Normal_2P', 'Gamma_2P', 'Loglogistic_2P',
+                   'Gamma_3P', 'Lognormal_2P', 'Lognormal_3P', 'Loglogistic_3P',
+                   'Gumbel_2P', 'Exponential_2P', 'Exponential_1P', 'Beta_2P']
+
+    if distinct_failure_count < 3:
+        logger.warning(f'Less than 3 distinct failure times for "{part}"! It is not possible to fit the Weibull_3P, Weibull_Mixture and Weibull_CR. '
+                       f'Therefore, these models will not be used for the fitting.')
+
+        exclude = base_exclude + ['Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
+
+    elif distinct_failure_count < 4:
+        logger.warning(f'Less than 4 distinct failure times for "{part}": Weibull_CR and Weibull_Mixture excluded for the fitting.')
+
+        exclude = base_exclude + ['Weibull_CR', 'Weibull_Mixture']
+
+    elif distinct_failure_count < 5:
+        if failure_size < 16:
+            logger.warning(f'Less than 5 distinct failures and less than 16 failures in total for "{part}": Weibull_CR and Weibull_Mixture excluded for the fitting.')
+            exclude = base_exclude + ['Weibull_CR', 'Weibull_Mixture']
+        else:
+            logger.warning(f'Less than 5 distinct failures but more than 16 failures in total for "{part}": Weibull_Mixture excluded for the fitting.')
+            exclude = base_exclude + ['Weibull_Mixture']
+
+    else:
+        if failure_size < 16:
+            logger.warning(f'Less than 16 failures in total for "{part}": Weibull_CR and Weibull_Mixture excluded for the fitting.')
+            exclude = base_exclude + ['Weibull_CR', 'Weibull_Mixture']
+        else:
+            exclude = base_exclude
+
+    try:
+        wb = Fit_Everything(failures=data['failures'], right_censored=data['suspensions'],
+                            sort_by=sort_by,
+                            show_probability_plot=False, show_histogram_plot=False, show_PP_plot=False, show_best_distribution_probability_plot=False,
+                            exclude=exclude,
+                            print_results=False,
+                            method='MLE', optimizer='Best')
+    except Exception as e:
+        raise RuntimeError(f'Weibull fitting all distributions failed for "{part}": {e}')
+
+    wb_data_fit_all = wb.results
+    wb_best_distribution_name = wb.best_distribution_name
+    #print(wb_data_fit_all.to_string())
+
+    return wb_data_fit_all, wb_best_distribution_name, data
 
 
 # ----------------------------------------------------------------------------------------------------------------------
