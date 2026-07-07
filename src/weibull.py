@@ -761,12 +761,13 @@ def get_forecast_cache():
     return _weibull_forecast_cache
 
 
-# ToDo: In case a Weibull Mixture (Competing Risk) is made of 1 failure by the first/second distribution and the rest of the failures by the other distribution --> neglect the Weibull Mixture
+
 def automated_weibull(save_path=None, return_sf=False, delta=0.466):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='BIC')
     ci = ask_ci(default=0.95)
+    ic_fallback = 'BIC'
 
     print(f"\n→ Starting search for parts with failure_threshold={failure_threshold}, distinct_threshold={distinct_threshold}, sort_by={sort_by} and CI={ci}\n")
 
@@ -785,9 +786,12 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
 
         wb_data_fit_all['PART'] = part
 
-        compared_best, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta)
+        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta)
 
-        wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best]})
+        selection_used = 'CV' if cv_used else ic_fallback
+        wb_data_fit_all['SELECTION_METHOD'] = selection_used
+
+        wb_best_distribution_row = pd.DataFrame({'PART': [part], 'BEST_DISTRIBUTION': [compared_best], 'SELECTION_METHOD': [selection_used]})
 
         parts_data_fit_all.append(wb_data_fit_all)
         parts_best_distribution_names.append(wb_best_distribution_row)
@@ -797,10 +801,10 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
 
     parts_best_distribution_names = pd.concat(parts_best_distribution_names, ignore_index=True)
 
-    fitter_map = {'Weibull_2P':         lambda p, sp: weibull_2p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
-                  'Weibull_3P':         lambda p, sp: weibull_3p(part=p, ci=ci, save_path=sp, return_sf=return_sf),
-                  'Weibull_Mixture':    lambda p, sp: weibull_mixture(part=p, ci=ci, save_path=sp, return_sf=return_sf),
-                  'Weibull_CR':         lambda p, sp: weibull_cr(part=p, ci=ci, save_path=sp, return_sf=return_sf)}
+    fitter_map = {'Weibull_2P':         lambda p, sp, sm: weibull_2p(part=p, ci=ci, save_path=sp, return_sf=return_sf, selection_method=sm),
+                  'Weibull_3P':         lambda p, sp, sm: weibull_3p(part=p, ci=ci, save_path=sp, return_sf=return_sf, selection_method=sm),
+                  'Weibull_Mixture':    lambda p, sp, sm: weibull_mixture(part=p, ci=ci, save_path=sp, return_sf=return_sf, selection_method=sm),
+                  'Weibull_CR':         lambda p, sp, sm: weibull_cr(part=p, ci=ci, save_path=sp, return_sf=return_sf, selection_method=sm)}
 
     parts_fit_results = {}
 
@@ -809,6 +813,7 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
     for _, row in parts_best_distribution_names.iterrows():
         part = row['PART']
         best_distribution = row['BEST_DISTRIBUTION']
+        selection_used = row['SELECTION_METHOD']
 
         fit_function = fitter_map.get(best_distribution)
 
@@ -820,7 +825,7 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
 
         part_save_path = os.path.join(save_path, f'{sort_by}_plot_{part}.png')
 
-        parts_fit_results[part] = fit_function(part, part_save_path)
+        parts_fit_results[part] = fit_function(part, part_save_path, selection_used)
 
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(f"\nThis are the results of the automated Weibull analysis:")
@@ -938,13 +943,24 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
-    # parts_data, data_all = automated_weibull(save_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull_Plots\new_automated_CV')
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots'
+    parts_data, data_all = automated_weibull(save_path=OUTPUT_DIR)
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    timestamp = datetime.datetime.now(tz=ZoneInfo('Europe/Zurich')).strftime('%Y%m%d_%H%M%S')
+
+    full_fit_table = pd.concat(data_all.values(), ignore_index=True)
+    csv_path = os.path.join(OUTPUT_DIR, f'automated_weibull_fit_table_{timestamp}.csv')
+    full_fit_table.to_csv(csv_path, index=False)
+
+    logger.info(f'Automated Weibull fit table saved to "{csv_path}" ({len(full_fit_table)} rows).')
+
 
     # fit_table, _, _ = weibull_fit_best(part='HCCTRV')
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(fit_table)
 
-    manual_weibull(part='HCCTRVD')
+    # manual_weibull(part='HCCTRVD')
 
     # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
     # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)

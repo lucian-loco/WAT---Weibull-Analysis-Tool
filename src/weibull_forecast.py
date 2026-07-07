@@ -742,7 +742,7 @@ if __name__ == '__main__':
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_path = os.path.join(OUTPUT_DIR, f'weibull_forecast_{timestamp}.csv')
+    output_path = os.path.join(OUTPUT_DIR, f'weibull_forecast_{timestamp}_delta_0-466.csv')
 
     df.to_csv(output_path, index=False)
     logger.info(f'Forecast saved to "{output_path}" ({len(df)} rows).')
