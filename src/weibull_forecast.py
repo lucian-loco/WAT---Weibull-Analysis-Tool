@@ -46,6 +46,8 @@ from reliability.Fitters import Fit_Weibull_2P, Fit_Weibull_3P, Fit_Weibull_CR, 
 from data_weibull import get_failures_and_suspensions
 from weibull_ci import _compute_covariance
 from utils import get_logger, DataError
+from weibull import weibull_fit_best
+from weibull_evaluation import compare_best_distribution
 
 logger = get_logger(__name__)
 
@@ -491,7 +493,7 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
         Criterion passed to model comparison.
     CI : float, default 0.95
         Confidence level.
-    delta_ic : float, default 0.1
+    delta_ic : float, default 0.466
         Threshold used by compare_best_distribution().
     cached_results : Dict | None
         Used to access the results instead of calculating them again.
@@ -512,9 +514,34 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
         If return_dataframe=True:
             concatenated DataFrame for all successful parts.
     """
+    sort_by = 'CV'
+    delta_ic = 0.466
+    new_cache = {}
+
     if cached_results is None:
         data_all = get_failures_and_suspensions(part=None)
-        part_names = list(data_all.keys())
+
+        for part, data in data_all.items():
+            try:
+                # weibull_fit_best always uses 'BIC' internally; CV is applied only in compare_best_distribution via the sort_by argument
+                sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+                fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
+
+                best_model, cv_used = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data,
+                                                                ic_fallback='BIC', delta=delta_ic)
+
+                new_cache[part] = {'best_model': best_model,
+                                   'fit_table': fit_table,
+                                   'data': data,
+                                   'cv_used': cv_used
+                }
+
+            except Exception as e:
+                logger.warning(f'Analysis cache: skipped "{part}": {e}')
+
+        cached_results = new_cache
+        part_names = list(cached_results.keys())
+
     else:
         part_names = list(cached_results.keys())
         data_all = data_prepared
@@ -609,22 +636,34 @@ def print_forecast(forecast, CI=0.95):
 # ----------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     from weibull_user_input import ask_sort_by, ask_ci, ask_deltas
-    from weibull import weibull_fit_best
-    from weibull_evaluation import compare_best_distribution
+    import os
+    from datetime import datetime
 
+    # part = input('Enter part name: ').strip()
+    # sort_by = ask_sort_by(default='BIC')
+    # ci = ask_ci(default=0.95)
+    # deltas = ask_deltas(default=[90.0, 180.0, 365.0])
+    #
+    # data = get_failures_and_suspensions()
+    #
+    # sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
+    # fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data[part])
+    # best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data[part], ic_fallback='BIC', delta=0.466)
+    #
+    # forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data, CI=ci)
+    #
+    # print_forecast(forecast, CI=ci)
+    # print(forecast_to_dataframe(forecast).to_string(index=False))
 
-    part = input('Enter part name: ').strip()
-    sort_by = ask_sort_by(default='BIC')
-    ci = ask_ci(default=0.95)
-    deltas = ask_deltas(default=[90.0, 180.0, 365.0])
+    DEFAULT_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0]
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast'
 
-    data = get_failures_and_suspensions()
+    ci = 0.95
+    df = forecast_all_parts_direct_delta(deltas=DEFAULT_DELTAS, CI=ci, return_dataframe=True)
 
-    sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
-    fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data[part])
-    best_model, _ = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data[part], ic_fallback='BIC', delta=0.466)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_path = os.path.join(OUTPUT_DIR, f'weibull_forecast_{timestamp}.csv')
 
-    forecast = forecast_part_direct_delta(part=part, deltas=deltas, fit_table=fit_table, best_model=best_model, data=data, CI=ci)
-
-    print_forecast(forecast, CI=ci)
-    print(forecast_to_dataframe(forecast).to_string(index=False))
+    df.to_csv(output_path, index=False)
+    logger.info(f'Forecast saved to "{output_path}" ({len(df)} rows).')
