@@ -125,11 +125,21 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull fitting all distributions failed for "{part}": {e}')
 
+    fit_status = {}
+
+    for dist in ["Weibull_2P", "Weibull_3P", "Weibull_CR", "Weibull_Mixture"]:
+        if dist in wb.excluded_distributions:
+            continue
+        optimizer = getattr(wb, f"{dist}_optimizer", None)
+        fit_status[dist] = {"success": optimizer is not None,
+                            "optimizer": optimizer,
+                            }
+
     wb_data_fit_all = wb.results
     wb_best_distribution_name = wb.best_distribution_name
     #print(wb_data_fit_all.to_string())
 
-    return wb_data_fit_all, wb_best_distribution_name, data
+    return wb_data_fit_all, wb_best_distribution_name, data, fit_status
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -604,10 +614,10 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
             try:
                 # weibull_fit_best always uses 'BIC' internally; CV is applied only in compare_best_distribution via the sort_by argument
                 sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
-                fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
+                fit_table, _, _, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
 
                 best_model, cv_used = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data,
-                                                                ic_fallback='BIC', delta=delta_ic)
+                                                                ic_fallback='BIC', delta=delta_ic, fit_status=fit_status)
 
                 new_cache[part] = {'best_model': best_model,
                                    'fit_table': fit_table,
@@ -735,7 +745,7 @@ if __name__ == '__main__':
     # print(forecast_to_dataframe(forecast).to_string(index=False))
 
     DEFAULT_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0]
-    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast'
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast\Before_Data-cleaning'
 
     ci = 0.95
     df = forecast_all_parts_direct_delta(deltas=DEFAULT_DELTAS, CI=ci, return_dataframe=True)

@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 
 # ToDo: Make the feedback messages passing upwards for the webtool in the end!
-def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, ic_fallback: str = 'BIC', delta: float = 0.466):
+def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, fit_status: dict | None = None, ic_fallback: str = 'BIC', delta: float = 0.466):
     """
     Central model selection.
 
@@ -38,6 +38,21 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
     missing = required_cols - set(df.columns)
     if missing:
         raise KeyError(f"compare_best_distribution: missing columns {missing} in results for part '{part}'")
+
+    if fit_status is None:
+        logger.warning(f'[{part}]: No fit_status dictionary provided. '
+                       f'Failed full-data fits cannot be filtered robustly.'
+        )
+    else:
+        failed_dists = [dist_name for dist_name, status in fit_status.items() if not status.get('success', False)]
+
+        if failed_dists:
+            logger.info(f'[{part}]: Excluding models with failed explicit full-data fit-status check -> {failed_dists}')
+            df = df.loc[~df['Distribution'].isin(failed_dists)].reset_index(drop=True)
+
+    #ToDo: Catch this RuntimeError properly
+    if df.empty:
+        raise RuntimeError(f'[{part}]: No candidate models remain after filtering failed full-data fits.')
 
     # 1) Basic IC winners (as before)
     best_aicc = df.at[df['AICc'].idxmin(), 'Distribution']
@@ -178,7 +193,9 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
             failures = np.asarray(data['failures'], dtype=float)
             censored = np.asarray(data['suspensions'], dtype=float) if data['suspensions'] is not None else None
 
-            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta)
+            candidate_models = df['Distribution'].tolist()
+
+            cv_results = cross_validate_weibull_models(part=part, failures=failures, censored=censored, seed=42, n_folds=5, n_repeats=5, delta=delta, candidate_models=candidate_models)
 
             if cv_results.get("cv_has_valid_models", False):
                 winner_cv = cv_results.get("cv_parsimonious_winner", None)
@@ -222,15 +239,15 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
         return _select_by_ic(fallback_col)
 
 
-def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
+def get_globally_allowed_models_for_cv(failures: np.ndarray, candidate_models: list[str] | None = None) -> list[str]:
     failures = np.asarray(failures, dtype=float)
     failuresize = len(failures)
     distinctfailurecount = len(np.unique(failures))
 
-    candidates = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
+    base_candidates = ['Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture']
 
-    # Start by assuming all four are possible
-    allowed = set(candidates)
+    allowed = set(candidate_models) if candidate_models is not None else set(base_candidates)
+    allowed &= set(base_candidates)
 
     # Mirror the logic of weibull_fit_best for 3P/CR/Mixture
     if distinctfailurecount < 3:
@@ -257,7 +274,7 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray) -> list[str]:
     return sorted(allowed)
 
 
-def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.466) -> dict:
+def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.466, candidate_models: list[str] | None = None) -> dict:
     """
     Repeated Stratified K-Fold CV on Weibull 2P, 3P, Competing Risk, and Mixture models.
 
@@ -348,7 +365,7 @@ def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarr
     # ------------------------------------------------------------------
     # 0. Global feasibility per model
     # ------------------------------------------------------------------
-    globally_allowed = get_globally_allowed_models_for_cv(failures=failures)
+    globally_allowed = get_globally_allowed_models_for_cv(failures=failures, candidate_models=candidate_models)
 
     if not globally_allowed:
         # CV not meaningful (no candidate model has enough failures)

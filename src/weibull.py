@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 # ToDo: Every Confidence Bound with analytical algorithm for consistency
 
 
-# ToDo: Include "if res.optimizer is None:" to check whether the fit was successful
+
 #-----------------------------------------------------------------------------------------------------------------------
 # Plot settings
 #-----------------------------------------------------------------------------------------------------------------------
@@ -344,10 +344,10 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False, s
 
     if failure_size < 4:
         raise ThresholdError('Not enough failures (more than 4) to perform Weibull Mixture in data for "{0}"'.format(part))
-    elif failure_size < 20:
+    elif failure_size < 16:
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
-            warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
+            warnings.warn(f'Less than 16 failures in total for "{part}"! It is highly recommended to use another model if there are less than 16 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
     if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
@@ -467,10 +467,10 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False, select
 
     if failure_size < 4:
         raise ThresholdError('Not enough failures (more than 4) to perform Weibull Competing Risks in data for "{0}"'.format(part))
-    elif failure_size < 20:
+    elif failure_size < 16:
         with warnings.catch_warnings():
             warnings.simplefilter('always', UserWarning)
-            warnings.warn(f'Less than 20 failures in total for "{part}"! It is highly recommended to use another model if there are less than 20 failures.', UserWarning)
+            warnings.warn(f'Less than 16 failures in total for "{part}"! It is highly recommended to use another model if there are less than 16 failures.', UserWarning)
 
     # Prevent zeros in the right censored data
     if data.get('suspensions') is not None and any(t == 0 for t in data['suspensions']):
@@ -646,11 +646,21 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
     except Exception as e:
         raise RuntimeError(f'Weibull fitting all distributions failed for "{part}": {e}')
 
+    fit_status = {}
+
+    for dist in ["Weibull_2P", "Weibull_3P", "Weibull_CR", "Weibull_Mixture"]:
+        if dist in wb.excluded_distributions:
+            continue
+        optimizer = getattr(wb, f"{dist}_optimizer", None)
+        fit_status[dist] = {"success": optimizer is not None,
+                            "optimizer": optimizer,
+        }
+
     wb_data_fit_all = wb.results
     wb_best_distribution_name = wb.best_distribution_name
     #print(wb_data_fit_all.to_string())
 
-    return wb_data_fit_all, wb_best_distribution_name, data
+    return wb_data_fit_all, wb_best_distribution_name, data, fit_status
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -690,9 +700,9 @@ def refresh_analysis_cache(sort_by='CV', delta_ic=0.466):
         try:
             # weibull_fit_best always uses 'BIC' internally; CV is applied only in compare_best_distribution via the sort_by argument
             sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
-            fit_table, _, _ = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
+            fit_table, _, _, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit, data=data)
 
-            best_model, cv_used = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic)
+            best_model, cv_used = compare_best_distribution(df=fit_table, sort_by=sort_by, part=part, data=data, ic_fallback='BIC', delta=delta_ic, fit_status=fit_status)
 
             new_cache[part] = {'best_model': best_model,
                                'fit_table': fit_table,
@@ -765,7 +775,7 @@ def get_forecast_cache():
 def automated_weibull(save_path=None, return_sf=False, delta=0.466):
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
-    sort_by = ask_sort_by(default='BIC')
+    sort_by = ask_sort_by(default='CV')
     ci = ask_ci(default=0.95)
     ic_fallback = 'BIC'
 
@@ -782,11 +792,11 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
     sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
 
     for part in part_names_hit:
-        wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
+        wb_data_fit_all, wb_best_distribution_name, data, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
         wb_data_fit_all['PART'] = part
 
-        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta)
+        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta, fit_status=fit_status)
 
         selection_used = 'CV' if cv_used else ic_fallback
         wb_data_fit_all['SELECTION_METHOD'] = selection_used
@@ -827,14 +837,6 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
 
         parts_fit_results[part] = fit_function(part, part_save_path, selection_used)
 
-    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-    #     print(f"\nThis are the results of the automated Weibull analysis:")
-    #     for part, df in parts_fit_results.items():
-    #         print(f"\n{'=' * 60}")
-    #         print(f"  {part}")
-    #         print(f"{'=' * 60}")
-    #         print(df.to_string(index=False))
-
     return parts_fit_results, parts_data_fit_all
 
 
@@ -851,9 +853,9 @@ def manual_weibull(part, return_sf=False, delta=0.466):
 
     print(f"\n→ Starting Analysis for {part} with sort_by={sort_by} and CI={ci}\n")
 
-    wb_data_fit_all, wb_best_distribution_name, data = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
+    wb_data_fit_all, wb_best_distribution_name, data, fit_status = weibull_fit_best(part=part, sort_by=sort_by if sort_by != 'CV' else 'BIC')
 
-    compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta)
+    compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=delta, fit_status=fit_status)
 
     selection_used = 'CV' if cv_used else ic_fallback
 
@@ -903,9 +905,9 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 
         sort_for_fit = sort_by if sort_by != 'CV' else 'BIC'
 
-        wb_data_fit_all, _, data = weibull_fit_best(part=part, sort_by=sort_for_fit)
+        wb_data_fit_all, _, data, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit)
 
-        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=0.466)
+        compared_best, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sort_by, part=part, data=data, ic_fallback=ic_fallback, delta=0.466, fit_status=fit_status)
 
     selection_used = 'CV' if cv_used else ic_fallback
 
@@ -943,7 +945,7 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
-    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots'
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots\Before_Data-cleaning'
     parts_data, data_all = automated_weibull(save_path=OUTPUT_DIR)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
