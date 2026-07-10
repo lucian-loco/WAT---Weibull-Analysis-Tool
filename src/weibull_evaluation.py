@@ -95,7 +95,7 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
         p2 = 1.0 - p1
 
         for p in (p1, p2):
-            if p < 0.1 or p > 0.9:
+            if p < 0.05 or p > 0.95:
                 logger.info(f'[{part}]: Weibull_Mixture rejected — proportion {p:.4f} outside [1%, 99%] range.')
                 return False
             est_failures = p * n_total_failures
