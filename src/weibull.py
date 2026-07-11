@@ -945,7 +945,7 @@ if __name__ == "__main__":
 
     # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
-    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots\Before_Data-cleaning'
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots\Normal_data'
     parts_data, data_all = automated_weibull(save_path=OUTPUT_DIR)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

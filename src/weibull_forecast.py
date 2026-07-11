@@ -744,8 +744,8 @@ if __name__ == '__main__':
     # print_forecast(forecast, CI=ci)
     # print(forecast_to_dataframe(forecast).to_string(index=False))
 
-    DEFAULT_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0]
-    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast\Before_Data-cleaning'
+    DEFAULT_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0, 3650.0]
+    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast\Normal_data'
 
     ci = 0.95
     df = forecast_all_parts_direct_delta(deltas=DEFAULT_DELTAS, CI=ci, return_dataframe=True)

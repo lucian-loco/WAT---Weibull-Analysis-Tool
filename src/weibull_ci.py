@@ -8,6 +8,7 @@ from reliability.Fitters import Fit_Weibull_Mixture, Fit_Weibull_CR, Fit_Weibull
 
 
 # ToDo: Think of adjusting the number of xvals automated to the range of the failures, whats the best case?
+# ToDo: If the spread between upper and lower is more than 0.99 then the confidence bounds are not suitable...think of a way to catch this
 """
 Fisher Matrix based parametric Monte Carlo confidence intervals 
 for Weibull Mixture and Weibull Competing Risks
