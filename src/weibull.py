@@ -743,9 +743,10 @@ def refresh_forecast_cache(deltas=None, ci=0.95):
     logger.info('Forecast cache refresh started...')
 
     weibull_analysis_cached_results = _weibull_analysis_cache
+    data_prepared = get_failures_and_suspensions(part=None)
 
     if weibull_analysis_cached_results:
-        result = forecast_all_parts_direct_delta(deltas=deltas, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True, data_prepared=_weibull_cache)
+        result = forecast_all_parts_direct_delta(deltas=deltas, CI=ci, cached_results=weibull_analysis_cached_results, skip_errors=True, data_prepared=data_prepared)
     else:
         result = {}
         logger.info(f'Calculation of results for the expected number of failures were not possible because there are no weibull_analysis_cached_results.')
