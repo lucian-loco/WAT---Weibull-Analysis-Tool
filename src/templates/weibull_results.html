@@ -40,6 +40,15 @@
 
     <div class="meta">
         Plot type <strong>{{ plot_type }}</strong>
+        <strong>
+            {% if plot_type == 'CDF' %}
+                Failure Probability (CDF)
+            {% elif plot_type == 'SF' %}
+                Survival Probability (SF)
+            {% else %}
+                {{ plot_type }}
+            {% endif %}
+        </strong>
         &nbsp;&nbsp;
         Selection method <strong>{{ sort_by }}</strong>
         &nbsp;&nbsp;
@@ -50,6 +59,9 @@
         <img class="plot" src="data:image/png;base64,{{ image_b64 }}" alt="Weibull plot">
     </div>
 
-    <a class="back" href="{{ url_for('route_weibull_form', part=part) }}">Back to weibull form</a>
+    <a class="back"
+       href="{{ url_for('route_weibull', part=part, plot_type=plot_type, edit=1) }}">
+        Modify input parameters for this plot
+    </a>
 </body>
 </html>

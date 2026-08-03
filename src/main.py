@@ -108,110 +108,8 @@ def favicon():
    return app.send_static_file('images/favicon.ico')
 
 
-@app.route('/weibull', methods=['GET'])
-def route_weibull_plot():
-    try:
-        part = request.args.get('part')
-        graph = generate_graph(part)
-    except RuntimeError as e:
-        return 'Weibull plot cannot be generated: ' + str(e), 400
-
-    return send_file(graph, mimetype='image/png')
-
-
-@app.route('/weibull_sf', methods=['GET'])
-def route_reliability_plot():
-    try:
-        part = request.args.get('part')
-        graph = generate_graph(part, return_sf=True)
-    except RuntimeError as e:
-        return 'Weibull plot cannot be generated: ' + str(e), 400
-
-    return send_file(graph, mimetype='image/png')
-
-
-@app.route('/weibull_form', methods=['GET', 'POST'])
-def route_weibull_form():
-    part = request.args.get('part')
-
-    if not part:
-        return 'Parameter "part" not valid or is missing', 400
-
-    errors = {}
-
-    if request.method == 'POST':
-        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
-        if err: errors['sort_by'] = err
-
-        ci, err = utils.validate_ci(request.form.get('ci', ''))
-        if err: errors['ci'] = err
-
-        plot_type, err = utils.validate_type(request.form.get('plot_type', ''))
-        if err: errors['plot_type'] = err
-
-        if not errors:
-            if plot_type == 'CDF':
-                return_sf = False
-            else:
-                return_sf = True
-            try:
-                graph = generate_graph(part=part, sort_by=sb, ci=ci, return_sf=return_sf)
-            except RuntimeError as e:
-                return 'Weibull plot cannot be generated: ' + str(e), 400
-
-            image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
-
-            return render_template('weibull_results.html', part=part, plot_type=plot_type, sort_by=sb, ci=ci, image_b64=image_b64)
-
-    return render_template('weibull_form.html', part=part, errors=errors, defaults={'plot_type': 'Failure Probability', 'sort_by': 'CV', 'ci': 0.95})
-
-
-@app.route('/forecast_form', methods=['GET', 'POST'])
-def route_forecast_form():
-    part = request.args.get('part')
-
-    if not part:
-        return 'Parameter "part" not valid or is missing', 400
-
-    errors = {}
-
-    if request.method == 'POST':
-        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
-        if err: errors['sort_by'] = err
-
-        fc_values, err = utils.validate_fc(request.form.get('fc', ''))
-        if err: errors['fc'] = err
-
-        ci, err = utils.validate_ci(request.form.get('ci', ''))
-        if err: errors['ci'] = err
-
-        if not errors:
-            try:
-                analysis_cache = get_analysis_cache()
-                # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
-                using_cached_analysis = (sb == 'CV')
-
-                if using_cached_analysis and analysis_cache and part in analysis_cache:
-                    cached = analysis_cache[part]
-                    best_model = cached['best_model']
-                    wb_data_fit_all = cached['fit_table']
-                else:
-                    sort_for_fit = sb if sb != 'CV' else 'BIC'
-                    wb_data_fit_all, _, data, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit)
-                    best_model, _ = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.466, fit_status=fit_status)
-
-                # ToDo: Maybe use here the cached forecast if possible too
-                forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
-            except RuntimeError as e:
-                return 'Forecast cannot be calculated: ' + str(e), 400
-
-            return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=sb, today=date.today(), timedelta=timedelta)
-
-    return render_template('forecast_form.html', part=part, errors=errors, defaults={'fc': '365, 730, 1095', 'ci': 0.95}, today_iso=date.today().isoformat())
-
-
-@app.route('/weibull_fixed', methods=['GET', 'POST'])
-def route_weibull_fixed():
+@app.route('/weibull', methods=['GET', 'POST'])
+def route_weibull():
     part = request.args.get('part')
     plot_type = request.args.get('plot_type')
     edit = request.args.get('edit', '0') == '1'
@@ -240,7 +138,7 @@ def route_weibull_fixed():
         }
 
         if errors:
-            return render_template('weibull_form_fixed.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
+            return render_template('weibull_form.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
 
         try:
             graph = generate_graph(part=part, sort_by=sb, ci=ci, return_sf=return_sf)
@@ -249,10 +147,10 @@ def route_weibull_fixed():
 
         image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
 
-        return render_template('weibull_results_fixed.html', part=part, plot_type=plot_type, sort_by=sb, ci=ci, image_b64=image_b64)
+        return render_template('weibull_results.html', part=part, plot_type=plot_type, sort_by=sb, ci=ci, image_b64=image_b64)
 
     if edit:
-        return render_template('weibull_form_fixed.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
+        return render_template('weibull_form.html', part=part, plot_type=plot_type, errors=errors, defaults=defaults)
 
     try:
         graph = generate_graph(part=part, sort_by='CV', ci=0.95, return_sf=return_sf)
@@ -261,7 +159,7 @@ def route_weibull_fixed():
 
     image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
 
-    return render_template('weibull_results_fixed.html', part=part, plot_type=plot_type, sort_by='CV', ci=0.95, image_b64=image_b64)
+    return render_template('weibull_results.html', part=part, plot_type=plot_type, sort_by='CV', ci=0.95, image_b64=image_b64)
 
 
 @app.route('/forecast_fixed', methods=['GET', 'POST'])
@@ -290,7 +188,6 @@ def route_forecast_fixed():
             wb_data_fit_all, _, data, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit)
             best_model, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.466, fit_status=fit_status)
 
-        # ToDo: Maybe use here the cached forecast if possible too
         return wb_data_fit_all, best_model, cv_used
 
     if request.method == 'POST':
@@ -314,6 +211,7 @@ def route_forecast_fixed():
 
         try:
             wb_data_fit_all, best_model, cv_used = compute_forecast(sb)
+# ToDo: Maybe use here the cached forecast if possible too
             forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
             selection_used = 'CV' if cv_used else 'BIC'
         except RuntimeError as e:
@@ -329,6 +227,7 @@ def route_forecast_fixed():
         if err:
             return 'Default forecast values invalid: ' + err, 400
         wb_data_fit_all, best_model, cv_used = compute_forecast(defaults['sort_by'])
+# ToDo: Maybe use here the cached forecast if possible too
         forecast = forecast_part_direct_delta(part=part, deltas=fc_default_values, fit_table=wb_data_fit_all, best_model=best_model, CI=defaults['ci'])
         selection_used = 'CV' if cv_used else 'BIC'
     except RuntimeError as e:
