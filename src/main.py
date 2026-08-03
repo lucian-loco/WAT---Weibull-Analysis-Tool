@@ -31,10 +31,10 @@ def refresh_all():
     refresh_cache()             # 1. Pull from DB
     refresh_analysis_cache()    # 2. Model selection with CV (default)
     refresh_forecast_cache()    # 3. Expected failure forecasts
-    try:
-        reliability_summary_table()
-    except RuntimeError as e:
-        return 'Reliability table could not be generated in confluence: ' + str(e), 400
+    # try:
+    #     reliability_summary_table()
+    # except RuntimeError as e:
+    #     return 'Reliability table could not be generated in confluence: ' + str(e), 400
 
 
 if weibull_cache_enabled:
@@ -262,6 +262,79 @@ def route_weibull_fixed():
     image_b64 = base64.b64encode(graph.getvalue()).decode('ascii')
 
     return render_template('weibull_results_fixed.html', part=part, plot_type=plot_type, sort_by='CV', ci=0.95, image_b64=image_b64)
+
+
+@app.route('/forecast_fixed', methods=['GET', 'POST'])
+def route_forecast_fixed():
+    part = request.args.get('part')
+    edit = request.args.get('edit', '0') == '1'
+
+    if not part:
+        return 'Parameter "part" not valid or is missing', 400
+
+    errors = {}
+    defaults = {'fc': '365, 730, 1095, 1825', 'ci': 0.95, 'sort_by': 'CV'}
+
+    def compute_forecast(sb):
+        analysis_cache = get_analysis_cache()
+        # As long as sort_by=='CV' the cache is valid to use even for the weibull_form
+        using_cached_analysis = (sb == 'CV')
+
+        if using_cached_analysis and analysis_cache and part in analysis_cache:
+            cached = analysis_cache[part]
+            best_model = cached['best_model']
+            wb_data_fit_all = cached['fit_table']
+            cv_used = cached['cv_used']
+        else:
+            sort_for_fit = sb if sb != 'CV' else 'BIC'
+            wb_data_fit_all, _, data, fit_status = weibull_fit_best(part=part, sort_by=sort_for_fit)
+            best_model, cv_used = compare_best_distribution(df=wb_data_fit_all, sort_by=sb, part=part, data=data, ic_fallback='BIC', delta=0.466, fit_status=fit_status)
+
+        # ToDo: Maybe use here the cached forecast if possible too
+        return wb_data_fit_all, best_model, cv_used
+
+    if request.method == 'POST':
+        sb, err = utils.validate_sort_by(request.form.get('sort_by', ''))
+        if err: errors['sort_by'] = err
+
+        fc_values, err = utils.validate_fc(request.form.get('fc', ''))
+        if err: errors['fc'] = err
+
+        ci, err = utils.validate_ci(request.form.get('ci', ''))
+        if err: errors['ci'] = err
+
+        defaults = {
+            'fc': request.form.get('fc', defaults['fc']),
+            'ci': request.form.get('ci', defaults['ci']),
+            'sort_by': request.form.get('sort_by', defaults['sort_by']),
+        }
+
+        if errors:
+            return render_template('forecast_form_fixed.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
+
+        try:
+            wb_data_fit_all, best_model, cv_used = compute_forecast(sb)
+            forecast = forecast_part_direct_delta(part=part, deltas=fc_values, fit_table=wb_data_fit_all, best_model=best_model, CI=ci)
+            selection_used = 'CV' if cv_used else 'BIC'
+        except RuntimeError as e:
+            return 'Forecast cannot be calculated: ' + str(e), 400
+
+        return render_template('forecast_results_fixed.html', output=forecast, ci=ci, sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
+
+    if edit:
+        return render_template('forecast_form_fixed.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
+
+    try:
+        fc_default_values, err = utils.validate_fc(defaults['fc'])
+        if err:
+            return 'Default forecast values invalid: ' + err, 400
+        wb_data_fit_all, best_model, cv_used = compute_forecast(defaults['sort_by'])
+        forecast = forecast_part_direct_delta(part=part, deltas=fc_default_values, fit_table=wb_data_fit_all, best_model=best_model, CI=defaults['ci'])
+        selection_used = 'CV' if cv_used else 'BIC'
+    except RuntimeError as e:
+        return 'Forecast cannot be calculated: ' + str(e), 400
+
+    return render_template('forecast_results_fixed.html', output=forecast, ci=defaults['ci'], sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
 
 
 @app.route('/crate/new')
