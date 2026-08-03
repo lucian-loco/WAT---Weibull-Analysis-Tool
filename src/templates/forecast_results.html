@@ -27,7 +27,6 @@
             text-align: center;
         }
         td.center { text-align: center; }
-        /* highlight row if CI is unavailable */
         tr.no-ci td { color: #888; font-style: italic; }
         tr.no-ci td.center { color: #888; }
 
@@ -50,7 +49,7 @@
         Installed units: <strong>{{ output.n_installed }}</strong> &nbsp;|&nbsp;
         Confidence interval: <strong>{{ (ci * 100) | round(0) | int }}%</strong> &nbsp;|&nbsp;
         CI Method: <strong>Analytical delta method</strong> |
-        Selection method: <strong>{{ sort_by }}</strong>
+        Selection method used: <strong>{{ sort_by }}</strong>
     </div>
 
     <h3>Expected number of failures</h3>
@@ -82,7 +81,6 @@
         </tbody>
     </table>
 
-    {# fit table — only if it is a pandas DataFrame with rows #}
     {% if output.fit_table is not none and output.fit_table | length > 0 %}
     <h3>Model fit summary</h3>
     <table>
@@ -113,7 +111,10 @@
     </table>
     {% endif %}
 
-    <a class="back" href="/forecast_form?part={{ output.part }}">← Back to forecast form</a>
+    <a class="back"
+       href="{{ url_for('route_forecast', part=part, edit=1) }}">
+        Modify input parameters for this forecast
+    </a>
 
 </body>
 </html>

@@ -162,8 +162,8 @@ def route_weibull():
     return render_template('weibull_results.html', part=part, plot_type=plot_type, sort_by='CV', ci=0.95, image_b64=image_b64)
 
 
-@app.route('/forecast_fixed', methods=['GET', 'POST'])
-def route_forecast_fixed():
+@app.route('/forecast', methods=['GET', 'POST'])
+def route_forecast():
     part = request.args.get('part')
     edit = request.args.get('edit', '0') == '1'
 
@@ -207,7 +207,7 @@ def route_forecast_fixed():
         }
 
         if errors:
-            return render_template('forecast_form_fixed.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
+            return render_template('forecast_form.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
 
         try:
             wb_data_fit_all, best_model, cv_used = compute_forecast(sb)
@@ -217,10 +217,10 @@ def route_forecast_fixed():
         except RuntimeError as e:
             return 'Forecast cannot be calculated: ' + str(e), 400
 
-        return render_template('forecast_results_fixed.html', output=forecast, ci=ci, sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
+        return render_template('forecast_results.html', output=forecast, ci=ci, sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
 
     if edit:
-        return render_template('forecast_form_fixed.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
+        return render_template('forecast_form.html', part=part, errors=errors, defaults=defaults, today_iso=date.today().isoformat())
 
     try:
         fc_default_values, err = utils.validate_fc(defaults['fc'])
@@ -233,7 +233,7 @@ def route_forecast_fixed():
     except RuntimeError as e:
         return 'Forecast cannot be calculated: ' + str(e), 400
 
-    return render_template('forecast_results_fixed.html', output=forecast, ci=defaults['ci'], sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
+    return render_template('forecast_results.html', output=forecast, ci=defaults['ci'], sort_by=selection_used, today=date.today(), timedelta=timedelta, part=part)
 
 
 @app.route('/crate/new')
