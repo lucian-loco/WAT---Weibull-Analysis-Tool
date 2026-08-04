@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 """
-Direct analytical delta-method confidence interval for the expected number of
-failures over future time windows.
+weibull_forecast.py
+=====================
+
+Direct analytical delta-method confidence interval for the expected number of failures over future time windows.
 
 Main idea
 ---------
@@ -23,18 +25,22 @@ This script computes a direct delta-method confidence interval for E_N by:
 5. Forming
        E_N ± z_(1-alpha/2) * sqrt(Var(E_N))
 
-This is an analytical alternative to the conservative envelope bounds based on
-pointwise SF intervals.
+This is an analytical alternative to the conservative envelope bounds based on pointwise SF intervals.
 
 Important notes
 ---------------
 - For Weibull 3P this implementation follows your current analytical CI logic:
-  gamma is treated as a fixed shift in the delta-method variance propagation for
-  the forecast functional as well. Therefore only the 2x2 covariance of
-  (log_alpha, log_beta) on gamma-shifted data is used.
-- For Mixture the proportion parameter remains on linear scale p, while alpha and
-  beta parameters are on log scale, matching your weibull_ci.py design.
+  gamma is treated as a fixed shift in the delta-method variance propagation for the forecast functional as well.
+  Therefore only the 2x2 covariance of (log_alpha, log_beta) on gamma-shifted data is used.
+- For Mixture the proportion parameter remains on linear scale p, while alpha and beta parameters are on log scale,
+  matching your weibull_ci.py design.
 - Installed assets are expected to have CURRENT_STATE == 'I'.
+
+Dependencies: `autograd` (exact gradients of the scalar E_N functional and the negative log-likelihood Hessian),
+`scipy.stats` (normal quantiles), the `reliability` package's `Fit_Weibull_*`/`Fit_Everything` classes, and
+`weibull_ci._compute_covariance` (shared covariance computation with the plotting module's confidence-bound logic).
+
+Author: Lucian Groha
 """
 import warnings
 import numpy as np
@@ -56,6 +62,58 @@ logger = get_logger(__name__)
 # Function for fitting the data to every available Weibull distribution | This function is important because the import from weibull.py is not possible!
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_fit_best(part, sort_by='BIC', data=None):
+    """
+    Fit every applicable distribution from the `reliability` package's `Fit_Everything` to a part's data and
+    return the comparison table, excluding non-Weibull distributions and any Weibull variant the data is statistically
+    too sparse to support.
+
+    Duplicated here (rather than imported) from `weibull_analysis.py` because importing that module directly is not
+    possible in this context (see inline comment in the source).
+
+    The exclusion logic mirrors `weibull_analysis.weibull_fit_best` exactly, based on distinct failure-time count
+    and total failure count:
+    - < 3 distinct failure times: excludes Weibull_3P, Weibull_CR, Weibull_Mixture.
+    - < 4 distinct failure times: excludes Weibull_CR, Weibull_Mixture.
+    - < 5 distinct failure times and < 16 total failures: excludes Weibull_CR, Weibull_Mixture.
+    - < 5 distinct failure times and >= 16 total failures: excludes Weibull_Mixture only.
+    - >= 5 distinct failure times and < 16 total failures: excludes Weibull_CR, Weibull_Mixture.
+    - >= 5 distinct failure times and >= 16 total failures: no additional exclusions.
+
+    Non-Weibull distributions (Normal, Gamma, Loglogistic, Lognormal, Gumbel, Exponential, Beta, Weibull_DS)
+    are always excluded.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None) and error messages.
+    sort_by : str, optional
+        Metric used by `Fit_Everything` to rank the fitted distributions (e.g. 'BIC', 'AICc'). Default: 'BIC'.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys. If None, fetched internally for `part`
+        via `get_failures_and_suspensions`.
+
+    Returns
+    -------
+    tuple
+        (wb_data_fit_all, wb_best_distribution_name, data, fit_status):
+        - wb_data_fit_all : pandas.DataFrame, goodness-of-fit results for every non-excluded distribution.
+        - wb_best_distribution_name : str, name of the top-ranked distribution per `sort_by`.
+        - data : dict, the (possibly cleaned) failures/suspensions data used.
+        - fit_status : dict, per Weibull-variant success flag and optimizer used
+          (for Weibull_2P/3P/CR/Mixture that were not excluded).
+
+    Raises
+    ------
+    ThresholdError
+        If there are fewer than 2 total failures.
+    RuntimeError
+        If `part` is falsy, or if `Fit_Everything` raises an exception.
+
+    Notes
+    -----
+    Suspension records with RUNNING_TIME == 0 are dropped with a UserWarning.
+    A FutureWarning from pandas about all-NA DataFrame concatenation is suppressed.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -146,6 +204,31 @@ def weibull_fit_best(part, sort_by='BIC', data=None):
 # Model re-fit
 # ----------------------------------------------------------------------------------------------------------------------
 def _refit_model(model_name, failures, suspensions):
+    """
+    Re-fit the specified Weibull model via MLE, matching the fitter settings used elsewhere in the pipeline,
+    for use as the basis of the forecast's parameter vector and covariance matrix.
+
+    Parameters
+    ----------
+    model_name : str
+        Name of the distribution to fit: 'Weibull_2P', 'Weibull_3P', 'Weibull_Mixture', or 'Weibull_CR'.
+    failures : array-like
+        Observed failure times.
+    suspensions : array-like or None
+        Right-censored (suspension) times; treated as None if empty.
+
+    Returns
+    -------
+    reliability fitter object
+        The fitted model instance (`Fit_Weibull_2P`, `Fit_Weibull_3P`, `Fit_Weibull_Mixture`, or `Fit_Weibull_CR`),
+        fit via MLE with the 'best' optimizer and no confidence bounds computed internally (CI_type='none' where
+        applicable, since bounds are computed separately by this module's delta method).
+
+    Raises
+    ------
+    ValueError
+        If `model_name` is not one of the four recognized distribution names.
+    """
     right_censored = suspensions if suspensions is not None and len(suspensions) > 0 else None
 
     common_kwargs = dict(failures=failures,
@@ -176,13 +259,36 @@ def _refit_model(model_name, failures, suspensions):
 # ----------------------------------------------------------------------------------------------------------------------
 def _get_params_and_covariance(fit, failures, right_censored=None):
     """
-    Returns parameter vector and covariance matrix consistent with weibull_ci.py.
+    Extract the MLE parameter vector (on the sampling/log scale used throughout `weibull_ci.py`) and its asymptotic
+    covariance matrix for a fitted Weibull model, for use in delta-method variance propagation.
 
-    Parameterizations:
+    Parameterizations returned:
     - Weibull 2P:      [log_alpha, log_beta]
-    - Weibull 3P:      [log_alpha, log_beta]   (gamma treated as fixed shift)
-    - Weibull Mixture: [log_a1, log_b1, log_a2, log_b2, p]
+    - Weibull 3P:      [log_alpha, log_beta] (gamma treated as a fixed shift; covariance is computed from a Weibull_2P
+                       log-likelihood on gamma-shifted data, consistent with `weibull_ci.py`)
+    - Weibull Mixture: [log_a1, log_b1, log_a2, log_b2, p] (proportion p on linear scale)
     - Weibull CR:      [log_a1, log_b1, log_a2, log_b2]
+
+    Parameters
+    ----------
+    fit : reliability fitter object
+        An already-fitted `Fit_Weibull_2P`, `Fit_Weibull_3P`, `Fit_Weibull_Mixture`, or `Fit_Weibull_CR` instance.
+    failures : array-like
+        Observed failure times (original scale), used to reconstruct the negative log-likelihood
+        for the Hessian computation.
+    right_censored : array-like, optional
+        Right-censored (suspension) times (original scale).
+
+    Returns
+    -------
+    tuple
+        (params, cov): `params` is the MLE parameter vector on the scale described above; `cov` is the corresponding
+        covariance matrix (or None if it could not be computed — see `weibull_ci._compute_covariance`).
+
+    Raises
+    ------
+    ValueError
+        If `fit` is not one of the four supported fitter types.
     """
     T_f = np.asarray(failures, dtype=float)
     T_rc = np.asarray(right_censored, dtype=float) if right_censored is not None else np.array([])
@@ -340,18 +446,57 @@ def _expected_failures_from_params_cr(params, ages, delta):
 # ----------------------------------------------------------------------------------------------------------------------
 def _expected_failures_direct_delta(fit, installed_running_times, delta, failures, right_censored=None, CI=0.95):
     """
-    Direct analytical delta-method CI for the scalar expected number of failures.
+    Compute the point estimate and direct analytical delta-method confidence interval for the expected number of
+    failures over a single forecast horizon.
+
+    Re-derives the parameter covariance matrix, differentiates the scalar expected-failures functional E_N(theta, delta)
+    with respect to theta via `autograd`, and propagates parameter uncertainty into E_N's variance
+    via Var(E_N) ≈ grad(E_N)^T · Cov(theta) · grad(E_N), forming a normal-approximation confidence interval
+    around the point estimate.
+
+    Parameters
+    ----------
+    fit : reliability fitter object
+        Already-fitted Weibull model (`Fit_Weibull_2P`, `Fit_Weibull_3P`, `Fit_Weibull_Mixture`, or `Fit_Weibull_CR`).
+    installed_running_times : array-like
+        Current running times (ages) of installed assets. Non-finite or negative values are dropped.
+    delta : float
+        Forecast horizon (time units matching the running times, e.g. days).
+    failures : array-like
+        Observed failure times used to refit the covariance matrix.
+    right_censored : array-like, optional
+        Right-censored (suspension) times.
+    CI : float, optional
+        Confidence level for the interval (default: 0.95).
 
     Returns
     -------
-    dict with:
-        delta
-        n_installed
-        expected_failures
-        lower_bound
-        upper_bound
-        standard_error
-        variance
+    dict
+        {
+            'delta': float, the forecast horizon used,
+            'n_installed': int, number of valid installed assets used,
+            'expected_failures': float, point estimate of E_N,
+            'lower_bound': float or None, lower CI bound (clipped to >= 0),
+            'upper_bound': float or None, upper CI bound (clipped to <= n_installed),
+            'standard_error': float or None, sqrt of the propagated variance,
+            'variance': float or None, the propagated variance of E_N
+        }
+        Bound/SE/variance fields are None if the covariance matrix could not be computed,
+        if the gradient computation failed, or if a negative variance was encountered (each case logs a UserWarning
+        but still returns the point estimate).
+
+    Raises
+    ------
+    DataError
+        If no installed assets have valid (finite, non-negative) running times, or (for Weibull 3P) if none remain
+        with running time >= gamma after shifting.
+    ValueError
+        If `fit` is not one of the four supported fitter types.
+
+    Notes
+    -----
+    For Weibull 3P, `installed_running_times` is shifted by the fitted gamma and any resulting negative ages
+    are dropped before the forecast is computed; the returned `n_installed` reflects this post-shift count.
     """
     ages = np.asarray(installed_running_times, dtype=float)
     ages = ages[np.isfinite(ages)]
@@ -495,6 +640,29 @@ def _expected_failures_point_estimate_only(fit, ages, delta):
 # Data extraction helpers
 # ----------------------------------------------------------------------------------------------------------------------
 def _extract_installed_running_times(data):
+    """
+    Extract valid FULL_RUNNING_TIME values for all currently installed assets (CURRENT_STATE == 'I')
+    from a part's data dictionary.
+
+    Parameters
+    ----------
+    data : dict
+        Part data dictionary containing an 'installed_assets' key (list of dicts, each expected to include
+        a 'FULL_RUNNING_TIME' field).
+
+    Returns
+    -------
+    list[float]
+        Finite, non-negative FULL_RUNNING_TIME values for installed assets.
+
+    Raises
+    ------
+    DataError
+        If `installed_assets` is empty, or if no valid (finite, non-negative, non-None) FULL_RUNNING_TIME values
+        remain after filtering.
+    KeyError
+        If any installed asset record is missing the FULL_RUNNING_TIME key.
+    """
     installed_assets = data.get('installed_assets', [])
     if len(installed_assets) == 0:
         raise DataError('No installed assets with CURRENT_STATE == "I" found.')
@@ -521,7 +689,52 @@ def _extract_installed_running_times(data):
 # ----------------------------------------------------------------------------------------------------------------------
 def forecast_part_direct_delta(part, deltas, fit_table, best_model, data=None, CI=0.95):
     """
-    Full forecast pipeline with direct analytical delta-method CI for expected failures.
+    Run the full forecast pipeline for a single part: re-fit the selected best model, compute the direct delta-method
+    expected-failures confidence interval for one or more forecast horizons, and package the results together
+    with a trimmed fit-quality table.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier.
+    deltas : float or list[float]
+        Forecast horizon(s) in days. A scalar input is internally wrapped into a single-element list and the output is
+        reshaped to reflect the scalar call.
+    fit_table : pandas.DataFrame
+        Goodness-of-fit results table (as produced by `weibull_fit_best`), containing at least a 'Distribution' column;
+        used only to extract and display the row for `best_model`.
+    best_model : str
+        Name of the previously selected best-fit distribution
+         ('Weibull_2P', 'Weibull_3P', 'Weibull_CR', or 'Weibull_Mixture'), used to re-fit the model for the forecast.
+    data : dict, optional
+        Pre-fetched dataset. If a dict keyed by part name is passed, the part's own sub-dict is extracted
+        via `data[part]`; if None, the data is fetched internally via `get_failures_and_suspensions(part)`.
+    CI : float, optional
+        Confidence level for the forecast intervals (default: 0.95).
+
+    Returns
+    -------
+    dict
+        {
+            'part': str,
+            'best_model': str,
+            'n_installed': int, number of installed assets used in the forecast,
+            'results': list[dict], one entry per delta (see
+              `_expected_failures_direct_delta` for the per-entry schema),
+            'fit_table': pandas.DataFrame, the `best_model` row of
+              `fit_table` with irrelevant columns (DS, Mu, Sigma, Lambda,
+              Log-likelihood, AICc, BIC, AD) dropped
+        }
+        If `deltas` was passed as a scalar, 'results' contains exactly one entry (still as a single-item list).
+
+    Raises
+    ------
+    RuntimeError
+        If `part` is falsy.
+
+    Notes
+    -----
+    Logs an informational message summarizing the forecast run (part, model, number of installed assets, deltas, CI).
     """
     if not part:
         raise RuntimeError('Invalid request: part not specified.')
@@ -574,34 +787,45 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
     """
     Run the direct-delta forecast for every part available in cached Weibull data.
 
+    If no cached model-selection results are supplied, this function first performs model fitting and selection
+    (via `weibull_fit_best` and `compare_best_distribution`, using sort_by='CV' with a BIC fallback and delta_ic=0.466)
+    for every part in the raw data cache, then runs the forecast for each part using the selected best model.
+
     Parameters
     ----------
-    deltas : float | list[float]
+    deltas : float or list[float]
         Forecast horizon(s) in days.
-    sort_by : str, default 'BIC'
-        Criterion passed to model comparison.
-    CI : float, default 0.95
-        Confidence level.
-    delta_ic : float, default 0.466
-        Threshold used by compare_best_distribution().
-    cached_results : Dict | None
-        Used to access the results instead of calculating them again.
-    skip_errors : bool, default True
-        If True, continue processing other parts when one part fails.
-    return_dataframe : bool, default False
-        If True, return one concatenated pandas DataFrame instead of raw dicts.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    cached_results : dict, optional
+        Pre-computed per-part model-selection results, keyed by part name, each value containing at least 'best_model'
+        and 'fit_table' (as produced by `weibull_analysis.refresh_analysis_cache`). If provided, model fitting/selection
+        is skipped and `data_prepared` must supply the corresponding raw data. If None, model fitting/selection is
+        performed from scratch for every part.
+    skip_errors : bool, optional
+        If True (default), a part that raises during forecasting is recorded in the 'errors' dict and processing
+        continues with the remaining parts. If False, the exception propagates immediately.
+    return_dataframe : bool, optional
+        If True, return one concatenated `pandas.DataFrame` (via `forecast_to_dataframe`) instead of a dict
+        of raw results. Default: False.
+    data_prepared : dict, optional
+        Pre-fetched raw failures/suspensions/installed-assets data per part (as returned by
+        `get_failures_and_suspensions(part=None)`), used together with `cached_results` to avoid redundant data
+        fetching. Required (and used) only when `cached_results` is provided.
 
     Returns
     -------
-    dict | pandas.DataFrame
-        If return_dataframe=False:
-            {
-                'results': {part_name: forecast_dict, ...},
-                'errors': {part_name: 'error message', ...}
-            }
+    dict or pandas.DataFrame
+        If `return_dataframe` is False:
+            {'results': {part_name: forecast_dict, ...},
+             'errors': {part_name: 'error message', ...}}
+        If `return_dataframe` is True:
+            A single concatenated DataFrame across all successful parts' forecasts (empty DataFrame if none succeeded).
 
-        If return_dataframe=True:
-            concatenated DataFrame for all successful parts.
+    Notes
+    -----
+    When computing model selection from scratch (`cached_results is None`), a part that fails model fitting/selection
+    is logged and skipped entirely (not included in `part_names`), independent of the `skip_errors` flag.
     """
     sort_by = 'CV'
     delta_ic = 0.466
@@ -669,6 +893,21 @@ def forecast_all_parts_direct_delta(deltas, CI=0.95, cached_results=None, skip_e
 # Output helpers
 # ----------------------------------------------------------------------------------------------------------------------
 def forecast_to_dataframe(forecast):
+    """
+    Flatten a single part's forecast output into a tidy pandas DataFrame, one row per forecast horizon (delta).
+
+    Parameters
+    ----------
+    forecast : dict
+        A single-part forecast dictionary as returned by `forecast_part_direct_delta`, containing 'part', 'best_model',
+        'n_installed', and a 'results' list of per-delta forecast dicts.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: 'part', 'best_model', 'n_installed', 'delta', 'expected_failures', 'lower_bound', 'upper_bound',
+        'standard_error', 'variance' — one row per entry in `forecast['results']`.
+    """
     rows = []
     for row in forecast['results']:
         rows.append({
@@ -686,6 +925,22 @@ def forecast_to_dataframe(forecast):
 
 
 def print_forecast(forecast, CI=0.95):
+    """
+    Print a human-readable, formatted summary table of a single part's forecast results to stdout.
+
+    Parameters
+    ----------
+    forecast : dict
+        A single-part forecast dictionary as returned by `forecast_part_direct_delta`.
+    CI : float, optional
+        Confidence level to display in the header (default: 0.95).
+        Note: this is for display only and does not affect the values already computed in `forecast`.
+
+    Returns
+    -------
+    None
+        Output is printed directly to stdout; nothing is returned.
+    """
     print(f"\n{'=' * 96}")
     print(f"Part               : {forecast['part']}")
     print(f"Best model         : {forecast['best_model']}")
@@ -745,7 +1000,7 @@ if __name__ == '__main__':
     # print(forecast_to_dataframe(forecast).to_string(index=False))
 
     DEFAULT_DELTAS = [90.0, 180.0, 365.0, 1095.0, 1825.0, 3650.0]
-    OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_forecast\Normal_data'
+    OUTPUT_DIR = r''
 
     ci = 0.95
     df = forecast_all_parts_direct_delta(deltas=DEFAULT_DELTAS, CI=ci, return_dataframe=True)

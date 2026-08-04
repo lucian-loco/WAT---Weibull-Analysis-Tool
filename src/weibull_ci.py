@@ -1,4 +1,41 @@
 #!/usr/bin/python3
+"""
+weibull_ci.py
+==============
+
+Confidence-interval (CI) computation engine for Weibull reliability models, implementing three independent methods 
+for bounding the fitted CDF/SF curves of Weibull_2P, Weibull_3P, Weibull_Mixture, and Weibull_CR (Competing Risks) 
+models fitted via the `reliability` package.
+
+Three complementary CI approaches are provided:
+
+1. **Parametric Monte Carlo (Fisher-matrix based)** — `*_fisher_bounds` functions. 
+   The Hessian of the negative log-likelihood is computed exactly at the MLE via automatic differentiation (`autograd`),
+   inverted to obtain the asymptotic covariance matrix, and used to draw random parameter vectors from a multivariate 
+   normal distribution. Each sampled curve is evaluated on the Weibull linearization (u) scale, and pointwise
+   percentiles yield the bounds. Physically invalid samples/curves (e.g. out-of-range mixture proportions, 
+   non-monotonic CDFs) are discarded.
+
+2. **Analytical delta method** — `*_analytical_bounds` functions. Uses the same Fisher-information covariance matrix, 
+   but derives bounds analytically via the delta method on the u-scale (Var(u) = grad(u)ᵀ·C·grad(u)) instead of sampling. 
+   This is faster and produces smooth, non-stochastic bounds, directly comparable to the Monte Carlo approach since 
+   both share the same covariance matrix. The mixture proportion parameter is bounded separately via a logit
+   transform to keep it within [0, 1].
+
+3. **Non-parametric bootstrap** — `*_bootstrap_bounds` functions. Resamples the original failure/suspension units 
+   with replacement (preserving censoring structure), refits the model via MLE on each resample, and derives pointwise 
+   percentile bounds from the resulting family of curves. Requires a minimum number of valid bootstrap fits (500) to
+   return bounds; warns if the valid-sample fraction falls below 75%.
+
+All three approaches support returning either CDF (failure probability) or SF (reliability/survival) bounds 
+via the `return_sf` flag, and are designed to plug into the plotting functions of `weibull_analysis.py`.
+
+Dependencies: `autograd` (automatic differentiation for exact Hessians/Jacobians), 
+`scipy.stats` (normal quantiles for the delta method), and the `reliability` package's `Fit_Weibull_*` classes 
+(for `.LL()` log-likelihood functions and fitted parameter attributes).
+
+Author: Lucian Groha
+"""
 import scipy
 import warnings
 import numpy as np
@@ -86,10 +123,9 @@ def _compute_covariance(neg_loglik_fn, params):
     """
     Computes the covariance matrix as the inverse of the Fisher information matrix.
 
-    The Fisher information matrix is the Hessian of the negative log-likelihood
-    evaluated at the MLE. The Hessian is computed exactly via automatic
-    differentiation (autograd) as the Jacobian of the gradient, avoiding the
-    need for step-size tuning inherent in numerical differentiation.
+    The Fisher information matrix is the Hessian of the negative log-likelihood evaluated at the MLE.
+    The Hessian is computed exactly via automatic differentiation (autograd) as the Jacobian of the gradient,
+    avoiding the need for step-size tuning inherent in numerical differentiation.
 
     Parameters
     ----------
@@ -102,9 +138,8 @@ def _compute_covariance(neg_loglik_fn, params):
     Returns
     -------
     cov : ndarray, shape (n_params, n_params), or None
-          Estimated covariance matrix of the parameter estimates.
-          Returns None with a UserWarning if the Hessian is singular, the covariance
-          matrix has negative diagonal entries, or contains NaN values.
+          Estimated covariance matrix of the parameter estimates. Returns None with a UserWarning if the Hessian is
+          singular, the covariance matrix has negative diagonal entries, or contains NaN values.
     """
     grad_fn = autograd.grad(neg_loglik_fn)
     hess_fn = autograd.jacobian(grad_fn)
@@ -141,44 +176,42 @@ def _compute_covariance(neg_loglik_fn, params):
 
 def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return_sf, seed, min_failure=None):
     """
-    Estimates confidence interval bounds via parametric Monte Carlo sampling.
+    Estimate pointwise CI bounds via parametric Monte Carlo sampling from the asymptotic parameter distribution.
 
-    Draws n_samples parameter vectors from a multivariate normal distribution
-    N(params, cov), evaluates the CDF curve over xvals for each sample, and
-    returns the pointwise CI percentile bounds. For CDF bounds, percentiles are
-    computed on the Weibull linearization scale (u = log(-log(1-F))) and
-    back-transformed to CDF space to reduce distortion from the nonlinearity
-    of the Weibull CDF. For mixture models (5 parameters), samples with a
-    proportion outside [0, 1] are discarded as physically invalid.
+    Draws `n_samples` parameter vectors from N(params, cov), evaluates the CDF curve over `xvals` for each valid sample,
+    and computes percentile bounds on the Weibull linearization (u) scale before back-transforming to CDF (or SF) space.
+    Physically invalid samples (mixture proportions outside [0,1], 3P gamma exceeding the earliest failure, or
+     non-monotonic/out-of-range CDF curves) are discarded before computing percentiles.
 
     Parameters
     ----------
-    cdf_fn    : callable
-                CDF function with signature f(t, params) -> vector.
-                Must accept log-scale parameters if sampling is done on log-scale.
-    params    : ndarray
-                MLE parameter vector on the sampling scale (e.g. log-scale for alpha, beta).
-    cov       : ndarray or None
-                Covariance matrix of the parameter estimates. If None, (None, None)
-                is returned immediately.
-    xvals     : array-like
-                Time values at which the bounds are evaluated.
-    CI        : float
-                Confidence level (e.g. 0.95 for a 95% CI).
+    cdf_fn : callable
+        CDF function with signature f(t, *params) -> array. Must accept parameters on the same scale as `params`
+        (e.g. log-scale for alpha/beta).
+    params : ndarray
+        MLE parameter vector on the sampling scale (log-scale for alpha/beta, linear for gamma/proportion).
+    cov : ndarray or None
+        Covariance matrix of the parameter estimates. If None, (None, None) is returned immediately.
+    xvals : array-like
+        Time values at which bounds are evaluated.
+    CI : float
+        Confidence level (e.g. 0.95 for a 95% CI).
     n_samples : int
-                Number of Monte Carlo samples.
+        Number of Monte Carlo samples to draw.
     return_sf : bool
-                If True, returns bounds for the survival function (SF = 1 - CDF)
-                instead of the CDF. SF bounds are derived from CDF bounds via SF = 1 - CDF, with bounds
-                correctly swapped: SF_lower = 1 - CDF_upper, SF_upper = 1 - CDF_lower.
-    seed      : int
-                Random seed for reproducibility.
+        If True, returns bounds for the survival function (SF = 1 - CDF) with bounds correctly swapped
+        (SF_lower = 1 - CDF_upper).
+    seed : int
+        Random seed for reproducibility.
+    min_failure : float, optional
+        For Weibull 3P only: the minimum observed failure time. Samples with gamma >= min_failure are discarded as
+        physically invalid (failure-free time cannot exceed the earliest observed failure).
 
     Returns
     -------
-    lower : ndarray, Lower confidence bound on the CDF (or SF if return_sf=True) scale.
-    upper : ndarray, Upper confidence bound on the CDF (or SF if return_sf=True) scale.
-    Returns (None, None) if cov is None or no valid samples remain after filtering.
+    tuple
+        (lower, upper): ndarrays of pointwise confidence bounds on the CDF (or SF) scale, clipped to [1e-9, 1-1e-9].
+        Returns (None, None) if `cov` is None or no valid samples/curves remain after filtering.
     """
     # If cov contains NaN then just return None, None as upper and lower --> no calculation of the CI
     if cov is None:
@@ -245,34 +278,34 @@ def _sample_and_compute_bounds(cdf_fn, params, cov, xvals, CI, n_samples, return
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
     """
-    Fisher-matrix-based confidence intervals for a Weibull mixture model.
+    Compute parametric Monte Carlo (Fisher-matrix based) confidence bounds for a fitted Weibull Mixture model's
+    CDF or SF curve.
 
     Parameters
     ----------
-    fit            : Fit_Weibull_Mixture
-                     Already fitted model object
-    xvals          : array-like
-                     x-values at which the confidence intervals are evaluated
-                     IMPORTANT: Derive from raw data (not from ax.get_xlim()),
-                     e.g.: np.logspace(np.log10(min(failures)*0.5), np.log10(max(failures)*2.0), 400)
-    failures       : list or array-like
-                     Failure times (required for Hessian computation)
+    fit : Fit_Weibull_Mixture
+        Already-fitted mixture model object exposing alpha_1, beta_1, alpha_2, beta_2, proportion_1.
+    xvals : array-like
+        x-values at which bounds are evaluated. Should be derived from the raw data range (e.g. via `np.logspace`),
+        not from `ax.get_xlim()`.
+    failures : list or array-like
+        Failure times, required to reconstruct the Hessian/log-likelihood.
     right_censored : list or array-like, optional
-                     Right-censored times
-    CI             : float
-                     Confidence level, default 0.95
-    n_samples      : int
-                     Number of Monte Carlo samples, default 5000
-    return_sf      : bool
-                     If True, return bounds for the survival function (SF)
-                     instead of the CDF
-    seed           : int
-                     Random seed for reproducibility
+        Right-censored (suspension) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_samples : int, optional
+        Number of Monte Carlo samples (default: 10000).
+    return_sf : bool, optional
+        If True, return bounds for the survival function instead of CDF.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower : ndarray, shape (len(xvals),)
-    upper : ndarray, shape (len(xvals),)
+    tuple
+        (lower, upper): ndarrays of shape (len(xvals),), or (None, None) if the covariance matrix could not be computed
+        or no valid samples remain.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -314,25 +347,33 @@ def weibull_mixture_fisher_bounds(fit, xvals, failures, right_censored=None, CI=
 
 def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
     """
-    Fisher-matrix-based confidence intervals for a Weibull competing risks model.
+    Compute parametric Monte Carlo (Fisher-matrix based) confidence bounds for a fitted Weibull Competing Risks model's
+    CDF or SF curve.
 
     Parameters
     ----------
-    fit             : Fit_Weibull_CR
-                      Already fitted model object
-    xvals           : array
-                      x-values (derive from raw data, not from ax.get_xlim())
-    failures        : list or array
-    right_censored  : list or array, optional
-    CI              : float, default 0.95
-    n_samples       : int, default 5000
-    return_sf       : bool
-    seed            : int
+    fit : Fit_Weibull_CR
+        Already-fitted competing risks model object exposing alpha_1, beta_1, alpha_2, beta_2.
+    xvals : array-like
+        x-values at which bounds are evaluated (derive from raw data, not `ax.get_xlim()`).
+    failures : list or array-like
+        Failure times.
+    right_censored : list or array-like, optional
+        Right-censored (suspension) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_samples : int, optional
+        Number of Monte Carlo samples (default: 10000).
+    return_sf : bool, optional
+        If True, return bounds for the survival function instead of CDF.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower : array, shape (len(xvals),)
-    upper : array, shape (len(xvals),)
+    tuple
+        (lower, upper): ndarrays of shape (len(xvals),), or (None, None) if the covariance matrix could not be computed
+        or no valid samples remain.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -372,40 +413,37 @@ def weibull_cr_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
 def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
     """
-    Computes confidence intervals for a Weibull 2P model using Fisher-matrix-based
-    Monte Carlo sampling.
+    Compute parametric Monte Carlo (Fisher-matrix based) confidence bounds for a fitted Weibull 2P model's 
+    CDF or SF curve.
 
-    The covariance matrix is derived analytically via automatic differentiation
-    (autograd) of the negative log-likelihood. Parameter sampling is performed on
-    the log-scale (ln(alpha), ln(beta)) to ensure positivity and improve the
-    normality assumption. Percentiles are evaluated on the Weibull linearization
-    scale (u-scale) before back-transformation to CDF space.
+    The covariance matrix is derived via automatic differentiation of the negative log-likelihood; 
+    parameters are sampled on the log-scale (ln(alpha), ln(beta)) to guarantee positivity, and percentiles are computed 
+    on the Weibull linearization (u) scale before back-transform.
 
     Parameters
     ----------
-    fit           : Fit_Weibull_2P
-                    Already fitted model object from the reliability library.
-    xvals         : array-like
-                    x-values at which the CI is evaluated.
-    failures      : list or array
-                    Failure times.
-    right_censored: list or array, optional
-                    Suspension (right-censored) times.
-    CI            : float, default 0.95
-                    Confidence level, e.g. 0.95 for a 95% CI.
-    n_samples     : int, default 10000
-                    Number of Monte Carlo samples drawn from the parameter distribution.
-    return_sf     : bool, default False
-                    If True, returns bounds for the survival function (SF) instead of the CDF.
-    seed          : int, default 42
-                    Random seed for reproducibility.
+    fit : Fit_Weibull_2P
+        Already-fitted 2-parameter Weibull model object from `reliability`.
+    xvals : array-like
+        x-values at which the CI is evaluated.
+    failures : list or array
+        Failure times.
+    right_censored : list or array, optional
+        Suspension (right-censored) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_samples : int, optional
+        Number of Monte Carlo samples drawn (default: 10000).
+    return_sf : bool, optional
+        If True, return bounds for the survival function instead of CDF (default: False).
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower : ndarray, shape (len(xvals),)
-            Lower confidence bound.
-    upper : ndarray, shape (len(xvals),)
-            Upper confidence bound.
+    tuple
+        (lower, upper): ndarrays of shape (len(xvals),) with the lower and upper confidence bounds, or (None, None) 
+        if the covariance matrix could not be computed.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -437,41 +475,38 @@ def weibull_2p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95,
 
 def weibull_3p_fisher_bounds(fit, xvals, failures, right_censored=None, CI=0.95, n_samples=10000, return_sf=False, seed=42):
     """
-    Computes confidence intervals for a Weibull 3P model using Fisher-matrix-based
-    Monte Carlo sampling.
+    Compute parametric Monte Carlo (Fisher-matrix based) confidence bounds for a fitted Weibull 3P model's
+    CDF or SF curve.
 
-    The covariance matrix is derived analytically via automatic differentiation
-    (autograd) of the negative log-likelihood. Parameter sampling is performed on
-    a mixed scale: log-scale for (ln(alpha), ln(beta)) to ensure positivity, and
-    linear scale for gamma (location parameter). Percentiles are evaluated on the
-    Weibull linearization scale (u-scale) before back-transformation to CDF space.
+    The covariance matrix is derived via automatic differentiation of the negative log-likelihood;
+    alpha and beta are sampled on the log-scale for positivity while gamma (location parameter) is sampled on the
+    linear scale. Percentiles are computed on the Weibull linearization (u) scale before back-transforming to CDF space.
+    Samples where gamma would exceed the minimum observed failure time are discarded as physically invalid.
 
     Parameters
     ----------
-    fit           : Fit_Weibull_3P
-                    Already fitted model object from the reliability library.
-    xvals         : array-like
-                    x-values at which the CI is evaluated. Should be derived
-                    from the raw data range, not from ax.get_xlim().
-    failures      : list or array
-                    Failure times.
-    right_censored: list or array, optional
-                    Suspension (right-censored) times.
-    CI            : float, default 0.95
-                    Confidence level, e.g. 0.95 for a 95% CI.
-    n_samples     : int, default 10000
-                    Number of Monte Carlo samples drawn from the parameter distribution.
-    return_sf     : bool, default False
-                    If True, returns bounds for the survival function (SF) instead of the CDF.
-    seed          : int, default 42
-                    Random seed for reproducibility.
+    fit : Fit_Weibull_3P
+        Already-fitted 3-parameter Weibull model object from `reliability`.
+    xvals : array-like
+        x-values at which the CI is evaluated. Should be derived from the raw data range, not `ax.get_xlim()`.
+    failures : list or array
+        Failure times.
+    right_censored : list or array, optional
+        Suspension (right-censored) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_samples : int, optional
+        Number of Monte Carlo samples drawn (default: 10000).
+    return_sf : bool, optional
+        If True, return bounds for the survival function instead of CDF (default: False).
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower : ndarray, shape (len(xvals),)
-            Lower confidence bound.
-    upper : ndarray, shape (len(xvals),)
-            Upper confidence bound.
+    tuple
+        (lower, upper): ndarrays of shape (len(xvals),) with the lower and upper confidence bounds, or (None, None)
+        if the covariance matrix could not be computed.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -590,14 +625,25 @@ _du_dparams_cr = autograd.jacobian(u_cr, argnum=1)
 #-----------------------------------------------------------------------------------------------------------------------
 # logit transformation for proportional factor
 def _logit_bounds_proportion(p_hat, var_p, Z):
-    """CI for proportion p via logit transform, keeps bounds in [0, 1].
-    var_p = C[4,4] directly (p is linear in the param vector).
+    """
+    Compute confidence bounds for the Weibull Mixture proportion parameter via a logit transform,
+    guaranteeing bounds stay within [0, 1].
 
-    Transformation:
-        w = logit(p) = log(p / (1-p))
-        Var(w) = Var(p) / (p*(1-p))^2     [Delta method on logit]
-        w_U/L = w +/- Z * sqrt(Var(w))
-        p_U/L = sigmoid(w_U/L) = 1 / (1 + exp(-w_U/L))
+    Parameters
+    ----------
+    p_hat : float
+        MLE estimate of the mixing proportion.
+    var_p : float
+        Variance of the proportion estimate (the [4,4] entry of the parameter covariance matrix,
+        since p is linear in the parameter vector).
+    Z : float
+        Standard normal critical value corresponding to the desired confidence level (e.g. 1.96 for 95%).
+
+    Returns
+    -------
+    tuple
+        (p_lower, p_upper): confidence bounds on the proportion, clipped to [1e-9, 1-1e-9]. Computed via w = logit(p),
+        Var(w) = Var(p) / (p(1-p))^2, bounds formed on w and back-transformed via the sigmoid function.
     """
     w_hat = np.log(p_hat / (1.0 - p_hat))
     var_w = var_p / (p_hat * (1.0 - p_hat)) ** 2
@@ -613,7 +659,36 @@ def _u_to_F(u):
 
 
 def _delta_bounds(u_fn, grad_fn, params, cov, xvals, Z, return_sf):
-    """Core delta-method loop, shared by mixture and CR."""
+    """
+    Core analytical delta-method loop shared by the Mixture and Competing-Risks (and, via reuse, 2P)
+    confidence bound calculations.
+
+    For each time point, computes the u-scale estimate and its variance via Var(u) = grad(u)^T · cov · grad(u),
+    forms symmetric bounds on the u-scale, and back-transforms them to CDF (or SF) space.
+
+    Parameters
+    ----------
+    u_fn : callable
+        Function u_fn(t, params) -> float, computing the u-scale CDF transform (one of `u_2p`, `u_mixture`, `u_cr`).
+    grad_fn : callable
+        Autograd-jacobian of `u_fn` with respect to `params`, i.e. grad_fn(t, params) -> ndarray of partial derivatives.
+    params : ndarray
+        MLE parameter vector matching `u_fn`'s expected scale.
+    cov : ndarray
+        Covariance matrix of the parameter estimates.
+    xvals : array-like
+        Time values at which to compute bounds.
+    Z : float
+        Standard normal critical value for the desired confidence level.
+    return_sf : bool
+        If True, returns survival-function bounds (1 - CDF bounds, correctly swapped) instead of CDF bounds.
+
+    Returns
+    -------
+    tuple
+        (lower, upper): ndarrays of pointwise bounds, or (None, None) if a negative variance is encountered
+        at any time point (indicating an invalid covariance matrix), in which case a UserWarning is raised.
+    """
     lower, upper = [], []
     for t in np.asarray(xvals):
         u_hat = u_fn(t, params)
@@ -640,27 +715,33 @@ def _delta_bounds(u_fn, grad_fn, params, cov, xvals, Z, return_sf):
 
 def _calculate_delta_bounds(fit, xvals, cov, params, CI=0.95, return_sf=False):
     """
-    Analytical Fisher-matrix CI (delta method) for Weibull 2P, 3P, Mixture and CR.
+    Dispatch analytical Fisher-matrix (delta method) confidence bound computation to the appropriate model based
+    on the parameter vector length, for Weibull 2P, 3P, Mixture, and Competing Risks.
 
     Parameters
     ----------
-    fit       : fitted model object
-    xvals     : array-like
-                For Weibull 3P: pass already gamma-shifted values (t - gamma_hat).
-                For all others: pass original time values.
-    cov       : ndarray – covariance matrix from _compute_covariance()
-                For Weibull 3P: pass cov_2p (2x2) only.
-    params    : ndarray
-                For Weibull 2P / 3P : [log_alpha, log_beta]
-                For Competing Risks  : [log_a1, log_b1, log_a2, log_b2]
-                For Mixture          : [log_a1, log_b1, log_a2, log_b2, p]
-    CI        : float
-    return_sf : bool
+    fit : fitted model object
+        The fitted distribution object (used only to access `proportion_1` for the Mixture case).
+    xvals : array-like
+        Time values at which bounds are evaluated. For Weibull 3P, these must already be gamma-shifted (t - gamma_hat).
+    cov : ndarray or None
+        Covariance matrix from `_compute_covariance()`. For Weibull 3P, pass the 2x2 (alpha, beta) covariance only.
+    params : ndarray
+        Parameter vector matching the model:
+        - 2 elements [log_alpha, log_beta] for Weibull 2P or 3P.
+        - 4 elements [log_a1, log_b1, log_a2, log_b2] for Competing Risks.
+        - 5 elements [log_a1, log_b1, log_a2, log_b2, p] for Mixture.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    return_sf : bool, optional
+        If True, return survival-function bounds instead of CDF bounds.
 
     Returns
     -------
-    lower, upper        : ndarray  – bounds on CDF (or SF)
-    p_lower, p_upper    : float or None – bounds on proportion p (Mixture only)
+    tuple
+        (lower, upper, p_lower, p_upper): lower/upper are ndarrays of bounds on the CDF (or SF) scale; p_lower/p_upper
+        are the proportion parameter's bounds (Mixture only, else None). Returns (None, None, None, None)
+        if `cov` is None or the parameter vector length is not 2, 4, or 5 (with a UserWarning in the latter case).
     """
     if cov is None:
         return None, None, None, None
@@ -692,6 +773,34 @@ def _calculate_delta_bounds(fit, xvals, cov, params, CI=0.95, return_sf=False):
 # Main functions for analytical Delta method: Mixture and Competing Risks
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_2p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    """
+    Compute analytical Fisher-matrix (delta-method) confidence bounds for a fitted Weibull 2P model's CDF or SF curve.
+
+    Faster and smoother (non-stochastic) than the Monte Carlo equivalent (`weibull_2p_fisher_bounds`),
+    using the same underlying covariance matrix but deriving bounds via the delta method on the u-scale.
+
+    Parameters
+    ----------
+    fit : Fit_Weibull_2P
+        Already-fitted 2-parameter Weibull model object.
+    xvals : array-like
+        Time values at which bounds are evaluated.
+    failures : list or array-like
+        Failure times.
+    right_censored : list or array-like, optional
+        Suspension (right-censored) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    return_sf : bool, optional
+        If True, return survival-function bounds instead of CDF bounds.
+
+    Returns
+    -------
+    tuple
+        (lower, upper, p_lower, p_upper): lower/upper are ndarrays of CDF (or SF) bounds;
+        p_lower/p_upper are always None (no proportion parameter for this model).
+        Returns (None, None, None, None) if the covariance matrix could not be computed.
+    """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
 
@@ -708,46 +817,45 @@ def weibull_2p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0
 # ToDo: Make this function without xvals already shifted but then use _calcualte_xvals() instead of ax.get_xlim() method
 def weibull_3p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
     """
-    Analytical Fisher-matrix CI (delta method) for a Weibull 3P model.
+    Compute analytical Fisher-matrix (delta-method) confidence bounds for a fitted Weibull 3P model's CDF or SF curve,
+    using a hybrid covariance strategy consistent with the `reliability` library and ReliaSoft Weibull++.
 
-    Algorithm is consistent with the reliability library and ReliaSoft Weibull++:
-
-    1. Covariance matrix (hybrid strategy):
-       - Var(alpha), Var(beta), Cov(alpha,beta): from Weibull_2P LL on
-         gamma-shifted data (T_f - gamma_hat). Stable Fisher information.
-       - Var(gamma): from full Weibull_3P LL (convergence check only,
-         not used in Var(u) calculation).
-       - Cross-covariances between (alpha, beta) and gamma: set to 0.
-
-    2. u-scale: gamma is treated as a fixed shift. xvals are expected to be
-       already gamma-shifted (t - gamma_hat), as returned by ax.get_xlim()
-       from a reliability Weibull 3P probability plot. Therefore du/dgamma = 0
-       and gamma does NOT contribute to Var(u). Identical to the reliability
-       library implementation.
-
-    3. Var(u) = grad(u)^T * C_2P * grad(u)  using the 2x2 covariance only.
-
-    4. Bounds: u_U/L = u_hat +/- Z * sqrt(Var(u)), back-transformed via
-       F = 1 - exp(-exp(u)).
+    Covariance strategy:
+    1. Var(alpha), Var(beta), Cov(alpha, beta) are computed from a Weibull_2P log-likelihood on gamma-shifted data
+       (T_f - gamma_hat), yielding a stable 2x2 Fisher information block.
+    2. Var(gamma) is computed separately from the full Weibull_3P log-likelihood, but used only as a convergence check —
+       it does not enter the u-scale variance calculation.
+    3. Cross-covariances between (alpha, beta) and gamma are treated as zero, since `xvals` are expected to already
+       be gamma-shifted (t - gamma_hat), making du/dgamma = 0.
 
     Parameters
     ----------
-    fit           : Fit_Weibull_3P
-    xvals         : array-like
-                    Gamma-shifted time values (t - gamma_hat), as returned by
-                    ax.get_xlim() from a reliability Weibull 3P probability plot.
-                    Values <= 0 are automatically excluded.
-    failures      : list or array, failure times (original scale).
-    right_censored: list or array, optional, suspension times (original scale).
-    CI            : float, default 0.95
-    return_sf     : bool, default False
+    fit : Fit_Weibull_3P
+        Already-fitted 3-parameter Weibull model object.
+    xvals : array-like
+        Gamma-shifted time values (t - gamma_hat), as returned by `ax.get_xlim()` from a reliability Weibull 3P
+        probability plot. Values <= 0 (corresponding to t <= gamma) should be excluded by the caller.
+    failures : list or array
+        Failure times on the original (unshifted) scale.
+    right_censored : list or array, optional
+        Suspension times on the original (unshifted) scale.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    return_sf : bool, optional
+        If True, return survival-function bounds instead of CDF bounds.
 
     Returns
     -------
-    lower  : ndarray or None
-    upper  : ndarray or None
-    None   : placeholder (no proportion parameter for 3P)
-    None   : placeholder
+    tuple
+        (lower, upper, None, None): lower/upper are ndarrays of CDF (or SF) bounds computed from the 2x2 (alpha, beta)
+        covariance; the last two elements are always None (no proportion parameter for this model).
+        Returns (None, None, None, None) if the 2x2 covariance could not be computed (with a UserWarning).
+
+    Notes
+    -----
+    If the full 3P covariance (including gamma) fails to compute, a UserWarning is issued,
+    but the function still proceeds using the stable 2x2 (alpha, beta) covariance, since gamma's variance is not
+    used in the final bound calculation.
     """
     T_f   = np.asarray(failures)
     T_rc  = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -794,6 +902,32 @@ def weibull_3p_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0
 
 
 def weibull_mixture_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    """
+    Compute analytical Fisher-matrix (delta-method) confidence bounds for a fitted Weibull Mixture model's CDF or SF
+    curve, including bounds on the mixing proportion parameter (via logit transform).
+
+    Parameters
+    ----------
+    fit : Fit_Weibull_Mixture
+        Already-fitted mixture model object exposing alpha_1, beta_1, alpha_2, beta_2, proportion_1.
+    xvals : array-like
+        Time values at which bounds are evaluated.
+    failures : list or array-like
+        Failure times.
+    right_censored : list or array-like, optional
+        Suspension (right-censored) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    return_sf : bool, optional
+        If True, return survival-function bounds instead of CDF bounds.
+
+    Returns
+    -------
+    tuple
+        (lower, upper, p_lower, p_upper): lower/upper are ndarrays of CDF (or SF) bounds;
+        p_lower/p_upper are the confidence bounds on the mixing proportion.
+        Returns (None, None, None, None) if the covariance matrix could not be computed.
+    """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
 
@@ -812,6 +946,32 @@ def weibull_mixture_analytical_bounds(fit, xvals, failures, right_censored=None,
 
 
 def weibull_cr_analytical_bounds(fit, xvals, failures, right_censored=None, CI=0.95, return_sf=False):
+    """
+    Compute analytical Fisher-matrix (delta-method) confidence bounds for a fitted Weibull Competing Risks model's CDF
+    or SF curve.
+
+    Parameters
+    ----------
+    fit : Fit_Weibull_CR
+        Already-fitted competing risks model object exposing alpha_1, beta_1, alpha_2, beta_2.
+    xvals : array-like
+        Time values at which bounds are evaluated.
+    failures : list or array-like
+        Failure times.
+    right_censored : list or array-like, optional
+        Suspension (right-censored) times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    return_sf : bool, optional
+        If True, return survival-function bounds instead of CDF bounds.
+
+    Returns
+    -------
+    tuple
+        (lower, upper, None, None): lower/upper are ndarrays of CDF (or SF) bounds; the last two elements are
+        always None (no proportion parameter for this model).
+        Returns (None, None, None, None) if the covariance matrix could not be computed.
+    """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
 
@@ -867,35 +1027,43 @@ Notes
 #-----------------------------------------------------------------------------------------------------------------------
 def _bootstrap_bounds(cdf_fn_orig, fit_fn, data_failures, data_suspensions, xvals, CI, n_bootstrap, return_sf, seed, min_failures):
     """
-    Computes confidence interval bounds via non-parametric bootstrap resampling.
+    Compute pointwise confidence interval bounds via non-parametric bootstrap resampling,
+    refitting the model on each resample.
 
-    Resamples units (failures + suspensions) with replacement, refits the model
-    for each bootstrap sample, evaluates the CDF curve over xvals, and returns
-    pointwise CI percentile bounds.
-
-    Each unit retains its original (time, status) pair — the censoring structure
-    is fully preserved. Bootstrap samples with fewer than min_failures failures,
-    non-converging fits, or physically invalid curves are silently discarded.
+    For each of `n_bootstrap` iterations, resamples all units (failures + suspensions, preserving each unit's
+    (time, status) pairing and hence the original censoring structure) with replacement, refits the model via `fit_fn`,
+    evaluates the CDF over `xvals`, and discards samples that have too few failures, fail to converge,
+    or yield a physically invalid curve (non-monotonic or outside [0, 1]).
 
     Parameters
     ----------
-    cdf_fn_orig     : callable
-                      CDF function f(xvals, *params) -> array on the original parameter scale.
-    fit_fn          : callable
-                      fit_fn(failures, suspensions) -> params array or None.
-                      Must return None or raise an exception on convergence failure.
-    data_failures   : array-like, original failure times.
-    data_suspensions: array-like, original suspension times (may be empty).
-    xvals           : array-like, time values for evaluation.
-    CI              : float, confidence level (e.g. 0.95).
-    n_bootstrap     : int, number of bootstrap samples.
-    return_sf       : bool, if True return SF bounds instead of CDF.
-    seed            : int, random seed for reproducibility.
-    min_failures    : int, minimum number of failures required per bootstrap sample.
+    cdf_fn_orig : callable
+        CDF function f(xvals, *params) -> array, on the original (non-log) parameter scale.
+    fit_fn : callable
+        fit_fn(failures, suspensions) -> ndarray of fitted parameters, or None if the fit did not converge.
+    data_failures : array-like
+        Original observed failure times.
+    data_suspensions : array-like
+        Original suspension times (may be empty).
+    xvals : array-like
+        Time values at which bounds are evaluated.
+    CI : float
+        Confidence level (e.g. 0.95).
+    n_bootstrap : int
+        Number of bootstrap resamples to attempt.
+    return_sf : bool
+        If True, return survival-function bounds instead of CDF bounds.
+    seed : int
+        Random seed for reproducibility.
+    min_failures : int
+        Minimum number of failures a bootstrap resample must contain to be used for fitting
+        (model-specific: 2P=2, 3P=3, CR=4, Mixture=5).
 
     Returns
     -------
-    lower, upper : ndarray or (None, None) if fewer than 10 valid samples remain.
+    tuple
+        (lower, upper): ndarrays of pointwise percentile bounds, or (None, None) if fewer than 500 valid bootstrap
+        curves remain (with a UserWarning if the valid fraction is below 75%).
     """
     rng    = np.random.default_rng(seed=seed)
     xvals  = np.asarray(xvals)
@@ -969,19 +1137,31 @@ def _bootstrap_bounds(cdf_fn_orig, fit_fn, data_failures, data_suspensions, xval
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_2p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
     """
+    Compute non-parametric bootstrap confidence bounds for a Weibull 2P model's CDF or SF curve,
+    by resampling data and refitting via MLE.
+
     Parameters
     ----------
-    xvals          : array-like, time values for evaluation.
-    failures       : array-like, observed failure times.
-    right_censored : array-like, suspension times (optional).
-    CI             : float, confidence level (e.g. 0.95).
-    n_bootstrap    : int, number of bootstrap samples.
-    return_sf      : bool, if True return SF bounds instead of CDF.
-    seed           : int, random seed for reproducibility.
+    xvals : array-like
+        Time values for bound evaluation.
+    failures : array-like
+        Observed failure times.
+    right_censored : array-like, optional
+        Suspension times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_bootstrap : int, optional
+        Number of bootstrap resamples (default: 2000).
+    return_sf : bool, optional
+        If True, return SF bounds instead of CDF bounds.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower, upper : ndarray or (None, None) if fewer than 100 valid samples remain.
+    tuple
+        (lower, upper): ndarrays of bounds, or (None, None) if fewer than 500 valid bootstrap fits remain.
+        Each resample requires at least 2 failures to be fit.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -1005,19 +1185,31 @@ def weibull_2p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n
 
 def weibull_3p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
     """
+    Compute non-parametric bootstrap confidence bounds for a Weibull 3P model's CDF or SF curve,
+    by resampling data and refitting via MLE.
+
     Parameters
     ----------
-    xvals          : array-like, time values for evaluation.
-    failures       : array-like, observed failure times.
-    right_censored : array-like, suspension times (optional).
-    CI             : float, confidence level (e.g. 0.95).
-    n_bootstrap    : int, number of bootstrap samples.
-    return_sf      : bool, if True return SF bounds instead of CDF.
-    seed           : int, random seed for reproducibility.
+    xvals : array-like
+        Time values for bound evaluation.
+    failures : array-like
+        Observed failure times.
+    right_censored : array-like, optional
+        Suspension times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_bootstrap : int, optional
+        Number of bootstrap resamples (default: 2000).
+    return_sf : bool, optional
+        If True, return SF bounds instead of CDF bounds.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower, upper : ndarray or (None, None) if fewer than 100 valid samples remain.
+    tuple
+        (lower, upper): ndarrays of bounds, or (None, None) if fewer than 500 valid bootstrap fits remain.
+        Each resample requires at least 3 failures to be fit.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -1041,19 +1233,31 @@ def weibull_3p_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n
 
 def weibull_mixture_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
     """
+    Compute non-parametric bootstrap confidence bounds for a Weibull Mixture model's CDF or SF curve,
+    by resampling data and refitting via MLE.
+
     Parameters
     ----------
-    xvals          : array-like, time values for evaluation.
-    failures       : array-like, observed failure times.
-    right_censored : array-like, suspension times (optional).
-    CI             : float, confidence level (e.g. 0.95).
-    n_bootstrap    : int, number of bootstrap samples.
-    return_sf      : bool, if True return SF bounds instead of CDF.
-    seed           : int, random seed for reproducibility.
+    xvals : array-like
+        Time values for bound evaluation.
+    failures : array-like
+        Observed failure times.
+    right_censored : array-like, optional
+        Suspension times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_bootstrap : int, optional
+        Number of bootstrap resamples (default: 2000).
+    return_sf : bool, optional
+        If True, return SF bounds instead of CDF bounds.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower, upper : ndarray or (None, None) if fewer than 100 valid samples remain.
+    tuple
+        (lower, upper): ndarrays of bounds, or (None, None) if fewer than 500 valid bootstrap fits remain.
+        Each resample requires at least 5 failures to be fit.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])
@@ -1078,19 +1282,31 @@ def weibull_mixture_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.
 
 def weibull_cr_bootstrap_bounds(xvals, failures, right_censored=None, CI=0.95, n_bootstrap=2000, return_sf=False, seed=42):
     """
+    Compute non-parametric bootstrap confidence bounds for a Weibull Competing Risks model's CDF or SF curve,
+    by resampling data and refitting via MLE.
+
     Parameters
     ----------
-    xvals          : array-like, time values for evaluation.
-    failures       : array-like, observed failure times.
-    right_censored : array-like, suspension times (optional).
-    CI             : float, confidence level (e.g. 0.95).
-    n_bootstrap    : int, number of bootstrap samples.
-    return_sf      : bool, if True return SF bounds instead of CDF.
-    seed           : int, random seed for reproducibility.
+    xvals : array-like
+        Time values for bound evaluation.
+    failures : array-like
+        Observed failure times.
+    right_censored : array-like, optional
+        Suspension times.
+    CI : float, optional
+        Confidence level (default: 0.95).
+    n_bootstrap : int, optional
+        Number of bootstrap resamples (default: 2000).
+    return_sf : bool, optional
+        If True, return SF bounds instead of CDF bounds.
+    seed : int, optional
+        Random seed for reproducibility (default: 42).
 
     Returns
     -------
-    lower, upper : ndarray or (None, None) if fewer than 100 valid samples remain.
+    tuple
+        (lower, upper): ndarrays of bounds, or (None, None) if fewer than 500 valid bootstrap fits remain.
+        Each resample requires at least 4 failures to be fit.
     """
     T_f  = np.asarray(failures)
     T_rc = np.asarray(right_censored) if right_censored is not None else np.array([])

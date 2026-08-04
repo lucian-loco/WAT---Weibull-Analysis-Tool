@@ -1,5 +1,35 @@
 #!/usr/bin/python3
-#Using the predictr library is fine but improvements are done with the Reliability package: https://reliability.readthedocs.io/en/latest/index.html
+"""
+weibull.py
+====================
+
+Core Weibull reliability analysis and plotting engine for the HITDB reliability dashboard.
+
+This module fits multiple Weibull-family models (2-Parameter, 3-Parameter, Mixture, and Competing Risks) to asset
+failure/suspension data retrieved via `data_weibull`, using the `reliability` package (Fit_Weibull_2P, Fit_Weibull_3P,
+Fit_Weibull_Mixture, Fit_Weibull_CR, Fit_Everything). It also compares candidate distributions
+(via `weibull_evaluation`), computes analytical/bootstrap/Fisher confidence bounds (via `weibull_ci`),
+forecasts expected failures (via `weibull_forecast`), and generates probability / reliability plots
+(matplotlib, non-interactive 'Agg' backend) either shown interactively, saved to disk, or returned as an in-memory PNG
+buffer for the dashboard.
+
+Three independent, thread-safe in-memory caches support the dashboard:
+    _weibull_analysis_cache : dict[str, dict] or None
+        Best-fit model + fit table per part (see `refresh_analysis_cache`).
+    _weibull_forecast_cache : dict or None
+        Pre-computed failure forecasts per part (see `refresh_forecast_cache`).
+    (in addition to `data_weibull._weibull_cache` for raw asset data)
+
+Two analysis modes are exposed for interactive/manual use:
+    - `automated_weibull`: batch analysis across all qualifying parts,
+      prompting for thresholds/CI via `weibull_user_input`.
+    - `manual_weibull`: analysis for a single specified part.
+
+`generate_graph` is the dashboard-facing entry point that reuses the
+analysis cache where possible and returns a plot as an in-memory buffer.
+
+Author: Lucian Groha
+"""
 from data_weibull import get_parts
 from data_weibull import get_cache_timestamp
 from data_weibull import get_failures_and_suspensions
@@ -101,6 +131,26 @@ def make_minor_year_label_formatter(decade_span):
 
 
 def plot_settings(fit, upper_quantile=0.99):
+    """
+    Apply shared axis/figure styling to a Weibull probability plot (log-scaled x-axis in years,
+    failure-probability y-axis) and annotate it with the data cache timestamp.
+
+    Extends the x-axis upper limit to cover the given upper quantile of the fitted distribution,
+    sets log-scale major/minor tick formatters (in years), resizes the figure, and stamps a "Data as of" text box
+    in the bottom-right corner using `get_cache_timestamp()`.
+
+    Parameters
+    ----------
+    fit : reliability fitter object
+        A fitted distribution object (e.g. from Fit_Weibull_2P) exposing `.distribution.quantile()`.
+    upper_quantile : float, optional
+        Quantile used to determine how far the x-axis should extend (default: 0.99).
+
+    Returns
+    -------
+    tuple
+        (ax, fig, xmin, xmax_new): the current Axes, current Figure, and the (possibly widened) x-axis limits as floats.
+    """
     ax = plt.gca()
     ax.set_xlabel('Time in years')
     ax.set_ylabel('Failure probability')
@@ -138,6 +188,29 @@ def plot_settings(fit, upper_quantile=0.99):
 
 # The distribution is not calculated for the full range of xvals by default, this function extends the MLE fit
 def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
+    """
+    Compute extra x-values needed to extend a Mixture/Competing-Risks CDF curve beyond the range
+    the `reliability` library plots by default.
+
+    The library only evaluates the fitted curve up to roughly one decade past the maximum observed failure time;
+    this function generates a log-spaced extension out to the given upper quantile, matching the point density
+    used internally by the library so the extended curve looks visually consistent.
+
+    Parameters
+    ----------
+    fit : reliability fitter object
+        A fitted Mixture or Competing-Risks distribution object exposing `.distribution.quantile()`.
+    fit_data : dict
+        Data dict containing at least the key 'failures' (list of floats).
+    upper_quantile : float, optional
+        Quantile defining how far the extension should reach (default: 0.999).
+
+    Returns
+    -------
+    tuple
+        (xvals, n_points): a numpy array of log-spaced x-values to extend the plot with
+        (or None if no extension is needed/possible), and the number of points generated (0 if none).
+    """
     x_at_upper = fit.distribution.quantile(upper_quantile)
 
     log_span_lib = (np.log10(max(fit_data['failures'])) + 1) - (np.log10(min(fit_data['failures'])) - 3)
@@ -158,6 +231,21 @@ def plot_extension_mix_cr(fit, fit_data, upper_quantile=0.999):
 
 
 def plot_settings_sf(xmax):
+    """
+    Apply shared axis/figure styling to a survival-function (reliability) plot (linear x-axis in years,
+    reliability y-axis from 0 to 1.05), with gridlines and a data-cache timestamp annotation.
+
+    Parameters
+    ----------
+    xmax : float
+        Upper limit for the x-axis, in the same units as the plotted data
+        (days; converted to years for display via `years_formatter`).
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The configured current Axes object.
+    """
     ax = plt.gca()
     ax.set_xlabel('Time in years')
     ax.set_ylabel('Reliability / survival probability')
@@ -195,6 +283,44 @@ def plot_settings_sf(xmax):
 # Function for Weibull 2P
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
+    """
+    Fit a 2-parameter Weibull distribution (MLE, best optimizer) to a part's failure/suspension data and
+    produce a probability plot (and optionally a reliability/survival-function plot).
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None), labeling, and error messages.
+    ci : float, optional
+        Confidence level for the plotted confidence bounds. A value of 0.0 disables confidence bounds
+        (internally substituted with 0.95 to avoid a library error, but bounds are not plotted). Default: 0.95.
+    save_path : str, path-like, or file-like, optional
+        If given, the probability plot (and SF plot, if requested) is saved here instead of shown interactively.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys (as returned by `get_failures_and_suspensions`).
+        If None, it is fetched internally for `part`.
+    return_sf : bool, optional
+        If True, also generates and (shows/saves) a survival-function (reliability) plot
+        in addition to the probability plot.
+    selection_method : str, optional
+        Label only — describes how this distribution was selected (e.g. 'CV', 'BIC'),
+        shown in the plot title (default: 'CV').
+
+    Returns
+    -------
+    pandas.DataFrame or similar
+        `wb.results`, the fitted-parameter results table from `Fit_Weibull_2P`.
+
+    Raises
+    ------
+    RuntimeError
+        If `part` is falsy, or if the Weibull 2P fit or the survival function computation fails.
+
+    Notes
+    -----
+    Suspension (right-censored) records with RUNNING_TIME == 0 are dropped with a UserWarning,
+    since a zero running time is invalid for censored data.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -263,6 +389,42 @@ def weibull_2p(part, ci=0.95, save_path=None, data=None, return_sf=False, select
 # Function for Weibull 3P
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
+    """
+    Fit a 3-parameter Weibull distribution (MLE, best optimizer, with a failure-free time offset γ) to
+    a part's failure/suspension data and produce a probability plot (and optionally a reliability plot).
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None), labeling, and error messages.
+    ci : float, optional
+        Confidence level for the plotted confidence bounds. A value of 0.0 disables confidence bounds
+        (internally substituted with 0.95). Default: 0.95.
+    save_path : str, path-like, or file-like, optional
+        If given, plot(s) are saved here instead of shown interactively.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys. If None, fetched internally for `part`.
+    return_sf : bool, optional
+        If True, also generates a survival-function (reliability) plot.
+    selection_method : str, optional
+        Label only — shown in the plot title (default: 'CV').
+
+    Returns
+    -------
+    pandas.DataFrame or similar
+        `wb.results`, the fitted-parameter results table from `Fit_Weibull_3P`
+        (includes α, β, and the failure-free time γ).
+
+    Raises
+    ------
+    RuntimeError
+        If `part` is falsy, or if the Weibull 3P fit or the survival function computation fails.
+
+    Notes
+    -----
+    Suspension records with RUNNING_TIME == 0 are dropped with a UserWarning.
+    The x-axis label on the probability plot is adjusted to reflect the fitted γ offset (in years).
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -332,6 +494,51 @@ def weibull_3p(part, ci=0.95, save_path=None, data=None, return_sf=False, select
 # Function for Weibull Mixture with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
+    """
+    Fit a 2-subpopulation Weibull Mixture model to a part's failure/suspension data, plot the probability curve
+    (extended beyond the library's default range via `plot_extension_mix_cr`), and optionally overlay
+    analytically-computed confidence bounds and a component-colored survival-function plot.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None), labeling, and error messages.
+    ci : float, optional
+        Confidence level for confidence bounds. 0.0 disables bound computation/plotting for the probability plot
+        (an internal 0.95 is substituted to satisfy the fitter, but bounds are not drawn/filled). Default: 0.95.
+    save_path : str, path-like, or file-like, optional
+        If given, the plot is saved here instead of shown interactively.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys. If None, fetched internally for `part`.
+    return_sf : bool, optional
+        If True, also generates a survival-function plot with each sub-distribution component colored separately
+        (component 1 green, component 2 orange, mixture blue).
+    selection_method : str, optional
+        Label only — shown in the plot title (default: 'CV').
+
+    Returns
+    -------
+    pandas.DataFrame or similar
+        `wb.results`, the fitted-parameter results table from `Fit_Weibull_Mixture` (α₁, β₁, α₂, β₂, mixing proportion).
+
+    Raises
+    ------
+    ThresholdError
+        If there are fewer than 4 total failures (mixture fitting is not attempted).
+    RuntimeError
+        If `part` is falsy, or if the Mixture fit or survival function computation fails.
+
+    Warns
+    -----
+    UserWarning
+        If there are fewer than 16 total failures (fit is possible but not recommended),
+        or if zero-valued suspensions were dropped.
+
+    Notes
+    -----
+    When `ci` is nonzero, an analytical confidence band is computed via `weibull_mixture_analytical_bounds` and
+    shaded on the plot. Fisher and bootstrap bound calculations exist in the code but are currently commented out.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -455,6 +662,51 @@ def weibull_mixture(part, ci=0.95, save_path=None, data=None, return_sf=False, s
 # Function for Weibull Competing Risks with 2 distributions
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False, selection_method='CV'):
+    """
+    Fit a 2-population Weibull Competing Risks model to a part's failure/suspension data, plot the probability curve
+    (extended via `plot_extension_mix_cr`), and optionally overlay analytically-computed confidence bounds
+    and a component-colored survival-function plot.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None), labeling, and error messages.
+    ci : float, optional
+        Confidence level for confidence bounds. 0.0 disables bound computation/plotting
+        (an internal 0.95 is substituted to satisfy the fitter). Default: 0.95.
+    save_path : str, path-like, or file-like, optional
+        If given, the plot is saved here instead of shown interactively.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys. If None, fetched internally for `part`.
+    return_sf : bool, optional
+        If True, also generates a survival-function plot with each risk component colored separately
+        (component 1 green, component 2 orange, combined model blue).
+    selection_method : str, optional
+        Label only — shown in the plot title (default: 'CV').
+
+    Returns
+    -------
+    pandas.DataFrame or similar
+        `wb.results`, the fitted-parameter results table from `Fit_Weibull_CR`
+        (α₁, β₁, α₂, β₂ for the two competing risks).
+
+    Raises
+    ------
+    ThresholdError
+        If there are fewer than 4 total failures (competing-risks fitting is not attempted).
+    RuntimeError
+        If `part` is falsy, or if the Competing Risks fit or survival function computation fails.
+
+    Warns
+    -----
+    UserWarning
+        If there are fewer than 16 total failures, or if zero-valued suspensions were dropped.
+
+    Notes
+    -----
+    When `ci` is nonzero, an analytical confidence band is computed via `weibull_cr_analytical_bounds` and
+    shaded on the plot. Fisher and bootstrap bound calculations exist in the code but are currently commented out.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -577,6 +829,53 @@ def weibull_cr(part, ci=0.95, save_path=None, data=None, return_sf=False, select
 # Function for fitting the data to every available Weibull distribution --> AICc and BIC for every distribution in returned result object
 #-----------------------------------------------------------------------------------------------------------------------
 def weibull_fit_best(part, sort_by='BIC', data=None):
+    """
+    Fit every applicable distribution from the `reliability` package's `Fit_Everything` to a part's data and
+    return the comparison table, excluding non-Weibull distributions and any Weibull variant that the data is
+    statistically too sparse to support.
+
+    The exclusion logic is based on the number of distinct failure times and total failure count:
+    - < 3 distinct failure times: excludes Weibull_3P, Weibull_CR, Weibull_Mixture.
+    - < 4 distinct failure times: excludes Weibull_CR, Weibull_Mixture.
+    - < 5 distinct failure times and < 16 total failures: excludes Weibull_CR, Weibull_Mixture.
+    - < 5 distinct failure times and >= 16 total failures: excludes Weibull_Mixture only.
+    - >= 5 distinct failure times and < 16 total failures: excludes Weibull_CR, Weibull_Mixture.
+    - >= 5 distinct failure times and >= 16 total failures: no additional exclusions.
+
+    Non-Weibull distributions (Normal, Gamma, Loglogistic, Lognormal, Gumbel, Exponential, Beta, Weibull_DS)
+    are always excluded.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier; used for data lookup (if `data` is None) and error messages.
+    sort_by : str, optional
+        Metric used by `Fit_Everything` to rank the fitted distributions (e.g. 'BIC', 'AICc'). Default: 'BIC'.
+    data : dict, optional
+        Pre-fetched data dict with 'failures'/'suspensions' keys. If None, fetched internally for `part`.
+
+    Returns
+    -------
+    tuple
+        (wb_data_fit_all, wb_best_distribution_name, data, fit_status):
+        - wb_data_fit_all : pandas.DataFrame, goodness-of-fit results for every non-excluded distribution.
+        - wb_best_distribution_name : str, name of the top-ranked distribution per `sort_by`.
+        - data : dict, the (possibly cleaned) failures/suspensions data used.
+        - fit_status : dict, per Weibull-variant success flag and optimizer used
+            (for Weibull_2P/3P/CR/Mixture that were not excluded).
+
+    Raises
+    ------
+    ThresholdError
+        If there are fewer than 2 total failures.
+    RuntimeError
+        If `part` is falsy, or if `Fit_Everything` raises an exception.
+
+    Notes
+    -----
+    Suspension records with RUNNING_TIME == 0 are dropped with a UserWarning.
+    A FutureWarning from pandas about all-NA DataFrame concatenation is suppressed.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -676,9 +975,32 @@ _forecast_cache_lock = threading.Lock()
 
 def refresh_analysis_cache(sort_by='CV', delta_ic=0.466):
     """
-    Pre-compute Weibull model selection for every cached part using the
-    default parameters that route_weibull_plot and route_reliability_plot use.
-    Must be called AFTER refresh_cache() so _weibull_cache is populated.
+    Pre-compute Weibull model selection (best-fit distribution + fit table) for every part currently held
+    in the raw data cache (`data_weibull._weibull_cache`), storing the results in the module's analysis cache
+    (`_weibull_analysis_cache`) for fast reuse by `generate_graph` and other dashboard routes.
+
+    Must be called AFTER `data_weibull.refresh_cache()` so the raw data cache is populated;
+    if it is empty, the refresh is skipped with a warning.
+
+    Parameters
+    ----------
+    sort_by : str, optional
+        Distribution-selection criterion passed to `compare_best_distribution` (e.g. 'CV', 'BIC', 'AICc').
+        Note that `weibull_fit_best` itself always sorts internally by 'BIC' when `sort_by == 'CV'`;
+        the actual CV-based comparison happens in `compare_best_distribution`. Default: 'CV'.
+    delta_ic : float, optional
+        Delta threshold used by `compare_best_distribution` when falling back to
+        an information-criterion-based comparison. Default: 0.466.
+
+    Returns
+    -------
+    None
+        Updates the module-level `_weibull_analysis_cache` and `_analysis_cache_timestamp` in place (thread-safe).
+
+    Notes
+    -----
+    Parts that fail to fit are skipped and logged (not raised), so a single bad part does not abort
+    the whole cache refresh.
     """
     global _weibull_analysis_cache, _analysis_cache_timestamp
 
@@ -726,8 +1048,25 @@ def refresh_analysis_cache(sort_by='CV', delta_ic=0.466):
 
 def refresh_forecast_cache(deltas=None, ci=0.95):
     """
-    Pre-compute failure forecasts for every cached part.
-    Must be called AFTER refresh_analysis_cache().
+    Pre-compute expected-failure forecasts (over a set of future time horizons) for every part in the analysis cache,
+    storing the result in the module's forecast cache (`_weibull_forecast_cache`).
+
+    Must be called AFTER `refresh_analysis_cache()`, since it consumes `_weibull_analysis_cache` as input.
+    If the raw data cache is empty, the refresh is skipped with a warning.
+
+    Parameters
+    ----------
+    deltas : list[float], optional
+        Forecast horizons in days. Defaults to [90.0, 180.0, 365.0, 1095.0, 1825.0] (~3mo, 6mo, 1y, 3y, 5y)
+        if not provided.
+    ci : float, optional
+        Confidence level used for the forecast confidence bounds (default: 0.95).
+
+    Returns
+    -------
+    None
+        Updates the module-level `_weibull_forecast_cache` in place (thread-safe).
+        If no analysis cache is available, an empty result dict is stored instead.
     """
     global _weibull_forecast_cache
 
@@ -774,6 +1113,40 @@ def get_forecast_cache():
 
 
 def automated_weibull(save_path=None, return_sf=False, delta=0.466):
+    """
+    Run a full, interactive batch Weibull analysis: prompts the user for failure/distinct thresholds, sort criterion,
+    and confidence level, finds all qualifying parts, fits every candidate distribution to each, selects
+    the best distribution per part, generates and saves a plot for each part's best model,
+    and returns the aggregated results.
+
+    Parameters
+    ----------
+    save_path : str, optional
+        Directory in which one plot PNG per part is saved (named '{sort_by}_plot_{part}.png').
+        Required implicitly since each plot is saved rather than shown.
+    return_sf : bool, optional
+        If True, each generated plot also includes a survival-function (reliability) plot
+        in addition to the probability plot.
+    delta : float, optional
+        Delta threshold used by `compare_best_distribution` for the information-criterion fallback comparison
+        (default: 0.466).
+
+    Returns
+    -------
+    tuple
+        (parts_fit_results, parts_data_fit_all):
+        - parts_fit_results : dict[str, Any], per-part fitted-parameter results table
+          from the chosen distribution's fitter function.
+        - parts_data_fit_all : dict[str, pandas.DataFrame], per-part goodness-of-fit comparison table
+          across all fitted distributions.
+
+        Notes
+        -----
+        Prompts interactively via `ask_threshold`, `ask_sort_by`, and `ask_ci`
+        (imported from `weibull_user_input` in the `__main__` block). Parts
+        whose best-fit distribution name is not recognized are skipped with a
+        RuntimeWarning.
+        """
     failure_threshold = ask_threshold("Failure threshold", default=4)
     distinct_threshold = ask_threshold("Distinct threshold", default=2)
     sort_by = ask_sort_by(default='CV')
@@ -845,6 +1218,37 @@ def automated_weibull(save_path=None, return_sf=False, delta=0.466):
 # Perform a manual Weibull Analysis to one specific part by using different Weibull distributions
 #-----------------------------------------------------------------------------------------------------------------------
 def manual_weibull(part, return_sf=False, delta=0.466):
+    """
+    Run an interactive Weibull analysis for a single specified part: prompts for sort criterion and confidence level,
+    fits every candidate distribution, selects the best one, and generates its plot interactively (shown, not saved).
+
+    Parameters
+    ----------
+    part : str
+        Part identifier to analyze.
+    return_sf : bool, optional
+        If True, also generates a survival-function (reliability) plot.
+    delta : float, optional
+        Delta threshold used by `compare_best_distribution` for the information-criterion fallback comparison
+        (default: 0.466).
+
+    Returns
+    -------
+    tuple or None
+        (wb_results, wb_data_fit_all, wb_best_distribution_name) where wb_results is the fitted-parameter table
+        from the chosen distribution's fitter, wb_data_fit_all is the full goodness-of-fit comparison table,
+        and wb_best_distribution_name is the name returned by `weibull_fit_best`. Returns None if the selected best
+        distribution name is not recognized (with a RuntimeWarning).
+
+    Raises
+    ------
+    RuntimeError
+        If `part` is falsy.
+
+    Notes
+    -----
+    Prompts interactively via `ask_sort_by` and `ask_ci` (imported from `weibull_user_input` in the `__main__` block).
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -882,6 +1286,38 @@ def manual_weibull(part, return_sf=False, delta=0.466):
 # Perform a Weibull Analysis to one specific part by using different Weibull distributions --> Plot for the HIT Dashboard
 #-----------------------------------------------------------------------------------------------------------------------
 def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
+    """
+    Generate a Weibull (or reliability) plot for a single part, for use by the HIT dashboard,
+    returning the image as an in-memory PNG buffer.
+
+    Reuses the pre-computed analysis cache (`get_analysis_cache()`) when `sort_by == 'CV'` and the part is present,
+    avoiding a full re-fit; otherwise recomputes the best-fit distribution on the fly.
+
+    Parameters
+    ----------
+    part : str
+        Part identifier to plot.
+    sort_by : str, optional
+        Distribution-selection criterion. If 'CV' (default) and cached results exist for `part`,
+        the cache is used directly; any other value forces a fresh fit (internally sorted by 'BIC') and a fresh
+        comparison via `compare_best_distribution`.
+    ci : float, optional
+        Confidence level for the plotted confidence bounds (default: 0.95).
+    return_sf : bool, optional
+        If True, generates a survival-function (reliability) plot instead of/in addition to the probability plot,
+        per the underlying fitter function's behavior.
+
+    Returns
+    -------
+    io.BytesIO or None
+        An in-memory buffer positioned at the start, containing the PNG image of the generated plot.
+        Returns None if the best-fit distribution name is not recognized (with a RuntimeWarning logged).
+
+    Raises
+    ------
+    RuntimeError
+        If `part` is falsy.
+    """
     if not part:
         raise RuntimeError('Invalid request ("part" not specified)')
 
@@ -936,15 +1372,8 @@ def generate_graph(part, sort_by='CV', ci=0.95, return_sf=False):
 #***********************************************************************************************************************
 if __name__ == "__main__":
     from weibull_user_input import ask_threshold, ask_sort_by, ask_ci
-    from Synthetic_Data import load_datasets_from_csv
 
-    # data_csv = load_datasets_from_csv(csv_path=r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\Synthetic-Data\synth_3P_a15000_b1_5_n50_cr0_2_g100.csv', seed=3)
 
-    # print(f'Der Datensatz sieht wie folgt aus: {data_csv[0]}')
-
-    # weibull_3p(part='Synthetic data', data=data_csv[0])
-
-    # weibull_2p(part='HCCTRP', ci=0.95, return_sf=True)
 
     OUTPUT_DIR = r'C:\Users\lgroha\cernbox\Documents\Masterthesis\4_Python-Tool\CEM-IN_data_result-plots\Normal_data'
     parts_data, data_all = automated_weibull(save_path=OUTPUT_DIR)
@@ -957,29 +1386,4 @@ if __name__ == "__main__":
     full_fit_table.to_csv(csv_path, index=False)
 
     logger.info(f'Automated Weibull fit table saved to "{csv_path}" ({len(full_fit_table)} rows).')
-
-
-    # fit_table, _, _ = weibull_fit_best(part='HCCTRV')
-    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-    #     print(fit_table)
-
-    # manual_weibull(part='HCCTRVD')
-
-    # weibull_cr(part='HCCVSEA', ci=0.95, return_sf=True)
-    # weibull_mixture(part='HCCVSWB', ci=0.95, return_sf=True)
-#     # data, _, name = manual_weibull('HCCFISA')
-#     parts_data, data_all = automated_weibull()
-#
-#     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-#         # print(f'\nResult data of the {name} fit:\n ', data)
-#         print(f'\nFull result data of every part for every distribution:')
-#         for part, df in data_all.items():
-#             print(f"\n{'=' * 60}")
-#             print(f"  {part}")
-#             print(f"{'=' * 60}")
-#             print(df.to_string(index=False))
-
-
-
-
 

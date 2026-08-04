@@ -4,7 +4,6 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-# TODO: evaluate https://atlassian-python-api.readthedocs.io/
 # https://developer.atlassian.com/server/confluence/confluence-rest-api-examples/
 class Confluence:
     def __init__(self, access_token: str):

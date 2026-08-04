@@ -1,4 +1,31 @@
 #!/usr/bin/python3
+"""
+weibull_evaluation.py
+======================
+
+Statistical model-selection engine for choosing the best Weibull distribution variant
+(2-Parameter, 3-Parameter, Competing Risks, or Mixture) for a given part's failure/suspension data.
+
+Combines two complementary strategies:
+
+1. Information-criterion selection (AICc / BIC): picks the distribution with the lowest IC,
+   then applies a Δ<=2 "strong support" rule followed by an Occam's-razor parsimony tiebreak
+   (simplest model among near-equivalent candidates).
+2. Cross-validation selection (`cross_validate_weibull_models`): fits each candidate model on
+   repeated stratified K-Fold splits, scores each fold by validation negative log-likelihood (NLL),
+   and selects the simplest model whose average CV-NLL lies within a `delta` tolerance of the best.
+
+`compare_best_distribution` is the single public entry point: it computes both IC-based and (optionally) CV-based
+winners, cross-checks them, applies a validity guard for Weibull_Mixture (rejects mixtures whose subpopulation
+proportions are too extreme or represent too few failures), and returns the final selected distribution
+together with a flag indicating whether CV was actually used.
+
+Global model feasibility (whether 3P/CR/Mixture can be fit at all given the number of distinct failure times and
+total failure count) mirrors the same rules used in `weibull_analysis.weibull_fit_best`, centralized here
+in `get_globally_allowed_models_for_cv`.
+
+Author: Lucian Groha
+"""
 import numpy as np
 import pandas as pd
 from utils import DataError, ThresholdError, NoCacheError
@@ -12,22 +39,62 @@ logger = get_logger(__name__)
 # ToDo: Make the feedback messages passing upwards for the webtool in the end!
 def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=None, fit_status: dict | None = None, ic_fallback: str = 'BIC', delta: float = 0.466):
     """
-    Central model selection.
+    Select the best-fitting Weibull distribution for a part, combining information-criterion (IC)
+    and cross-validation (CV) evidence.
 
-    sort_by:
-      - 'AICc' or 'BIC' → use pure information-criterion selection.
-      - 'CV'            → try cross-validation; if not feasible, fall back to IC using ic_fallback.
+    This is the central model-selection function used by both the automated and manual Weibull analysis workflows.
 
-    Behavior:
-      - Always computes ΔAICc / ΔBIC and strong-support sets (Δ<2).
-      - If sort_by == 'CV' AND data is provided AND CV is feasible:
-          * Calls cross_validate_weibull_models(failures, censored)
-          * Uses cv_parsimonious_winner as the winner
-          * Warns if CV winner is NOT in strong-support set of AICc/BIC (Δ>=2)
-      - Otherwise:
-          * Uses the original IC rule:
-              - If AICc and BIC winners agree → that distribution.
-              - Else → use ic_fallback column ('AICc' or 'BIC').
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Goodness-of-fit results table (as produced by `weibull_analysis.weibull_fit_best`), containing at least the
+        columns 'Distribution', 'AICc', and 'BIC' (one row per candidate distribution).
+        Optionally contains 'Proportion 1' for Weibull_Mixture validity checks.
+    sort_by : str
+        Selection mode:
+        - 'AICc' or 'BIC': pure information-criterion selection using that column.
+        - 'CV': attempt cross-validation first; if CV is infeasible or inconclusive,
+           fall back to IC selection using `ic_fallback`.
+    part : str
+        Part identifier, used only for log messages and error context.
+    data : dict, optional
+        Raw failures/suspensions data (as returned by `get_failures_and_suspensions`), required to run CV and to check
+        Weibull_Mixture proportion validity. If None, CV is skipped and the function falls back to IC selection.
+    fit_status : dict, optional
+        Per-distribution success flags (as returned by `weibull_fit_best`'s `fit_status`), used to exclude distributions
+        whose full-data MLE fit failed even though they appear in `df`.
+        If None, this filtering is skipped with a warning.
+    ic_fallback : str, optional
+        Which IC column ('AICc' or 'BIC') to use when AICc and BIC disagree on the numeric winner,
+        or when CV falls back to IC. Default: 'BIC'.
+    delta : float, optional
+        Equivalence/tolerance threshold applied in the CV parsimony step (passed through to
+        `cross_validate_weibull_models`) and reused when re-selecting after a rejected Weibull_Mixture CV winner.
+        Default: 0.466.
+
+    Returns
+    -------
+    tuple
+        (winner, cv_used):
+        - winner : str, the name of the selected distribution
+          ('Weibull_2P', 'Weibull_3P', 'Weibull_CR', or 'Weibull_Mixture').
+        - cv_used : bool, True if the winner was determined via
+          cross-validation, False if determined via information criteria.
+
+    Raises
+    ------
+    KeyError
+        If `df` is missing required columns ('Distribution', 'AICc', 'BIC'),
+        or if an invalid `fallback_col` is requested internally.
+    RuntimeError
+        If no candidate distributions remain after filtering out models with a failed full-data fit (per `fit_status`).
+
+    Notes
+    -----
+    A Weibull_Mixture winner (from either IC or CV) is rejected if either subpopulation's estimated proportion
+    falls outside [5%, 95%] or represents fewer than 3 failures; in that case, selection is re-run among the remaining
+    distributions. A CV winner that falls outside the AICc/BIC "strong support" set (Δ>=2 for both) triggers
+    a warning log but is still returned as the winner.
     """
     cv_used = False
     df = df.reset_index(drop=True).copy()
@@ -240,6 +307,29 @@ def compare_best_distribution(df: pd.DataFrame, sort_by: str, part: str, data=No
 
 
 def get_globally_allowed_models_for_cv(failures: np.ndarray, candidate_models: list[str] | None = None) -> list[str]:
+    """
+    Determine which Weibull distributions are statistically feasible to fit and cross-validate, given the overall
+    failure data, mirroring the exclusion rules used in `weibull_analysis.weibull_fit_best`.
+
+    Combines two feasibility checks:
+    1. Distinct-failure-time / sample-size rules (same thresholds as `weibull_fit_best`): fewer distinct failure times
+       or fewer total failures progressively excludes Weibull_3P, then Weibull_CR and Weibull_Mixture.
+    2. Absolute technical minimums per model: Weibull_2P needs >=2 failures, 3P >=3, CR >=4, Mixture >=5.
+
+    Parameters
+    ----------
+    failures : np.ndarray
+        Array of observed failure times (uncensored).
+    candidate_models : list[str], optional
+        Restrict the check to this subset of distribution names. If None, all four base models
+        ('Weibull_2P', 'Weibull_3P', 'Weibull_CR', 'Weibull_Mixture') are considered.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of distribution names that are feasible to fit given the failure data
+        (and the optional `candidate_models` restriction).
+    """
     failures = np.asarray(failures, dtype=float)
     failuresize = len(failures)
     distinctfailurecount = len(np.unique(failures))
@@ -276,77 +366,65 @@ def get_globally_allowed_models_for_cv(failures: np.ndarray, candidate_models: l
 
 def cross_validate_weibull_models(part, failures: np.ndarray, censored: np.ndarray | None, seed: int = 42, n_folds: int = 5, n_repeats: int = 5, delta: float = 0.466, candidate_models: list[str] | None = None) -> dict:
     """
-    Repeated Stratified K-Fold CV on Weibull 2P, 3P, Competing Risk, and Mixture models.
+    Cross-validate Weibull_2P, Weibull_3P, Weibull_CR, and Weibull_Mixture using repeated stratified K-Fold splits,
+    and select a parsimonious winner based on average validation negative log-likelihood (NLL).
 
-    Feasibility is enforced at two levels:
-    - Globally: based on total failure count and distinct failure count (see get_globally_allowed_models_for_cv)
-    - Per fold: minimum failures in the training fold required per model:
-        - 2P:      >= 2 failures in train fold
-        - 3P:      >= 3 failures in train fold
-        - CR:      >= 4 failures in train fold
-        - Mixture: >= 5 failures in train fold
+    For each fold: candidate models are fit via MLE on the training split (subject to global and
+    per-fold minimum-failure feasibility), and scored on the held-out validation split using NLL — the negative sum
+    of log-PDF for validation failures plus log-survival-function for validation suspensions.
+    Folds with no validation failures, or models that fail to fit or feasibility-check out, contribute an infinite
+    score for that fold.
 
-    Early-failure protection: the single earliest failure is always kept in the training fold
-    and never assigned to validation, to avoid degenerate fold splits.
-
-    Stratification guard: if censored observations exist but either class (failures or censored)
-    has fewer than n_folds members, CV is aborted and cv_has_valid_models=False is returned.
-
-    Model selection:
-    - All valid models (globally allowed, at least one finite fold score) are ranked by avg_cv_nll.
-    - The numeric best model is identified (lowest avg_cv_nll).
-    - An equivalence group is formed: all valid models whose avg_cv_nll is within delta of the best.
-    - Among the equivalence group, the simplest model (by parameter count) is selected as the
-      parsimonious winner (Occam's Razor: 2P < 3P < CR < Mixture).
+    Feasibility safeguards:
+    - Global: `get_globally_allowed_models_for_cv` restricts which models are attempted at all,
+      based on total/distinct failure counts.
+    - Per fold: minimum training failures required per model (2P: 2, 3P: 3, CR: 4, Mixture: 5).
+    - Stratification guard: if suspensions exist but either class (failures or suspensions) has fewer members
+      than `n_folds`, CV is aborted entirely (`cv_has_valid_models=False`).
+    - Early-failure protection: the single earliest failure is always forced into the training fold
+      to avoid degenerate splits.
 
     Parameters
     ----------
     part : str
-        Label of the part / dataset, used in printed feedback messages.
+        Label of the part/dataset, used only in log messages.
     failures : np.ndarray
         Array of observed failure times.
-    censored : np.ndarray | None
-        Array of right-censored times. Pass None or empty array if no suspensions.
+    censored : np.ndarray or None
+        Array of right-censored (suspension) times; pass None or an empty array if there are no suspensions.
     seed : int, optional
-        Random state for RepeatedStratifiedKFold. Fixed seed ensures reproducibility;
-        sklearn internally derives different permutations for each repeat automatically.
-        Default: 42.
+        Random state for `RepeatedStratifiedKFold`, ensuring reproducible fold splits across repeats. Default: 42.
     n_folds : int, optional
-        Number of CV folds (k in k-fold). Default: 5.
+        Number of folds (k) per repeat. Default: 5.
     n_repeats : int, optional
-        Number of times the full k-fold CV is repeated with different splits.
-        Increasing n_repeats improves stability of avg_cv_nll estimates.
-        Default: 5.
+        Number of repeated k-fold runs with different splits, improving the stability of the average NLL estimate. Default: 5.
     delta : float, optional
-        Equivalence threshold on avg_cv_nll. A model is included in the equivalence group
-        if its avg_cv_nll does not exceed the best model's avg_cv_nll by more than delta.
-        Delta controls how broad the set of "close enough" models is before parsimony is applied:
-        smaller values make the eligibility rule stricter, while larger values allow more models
-        to remain eligible for the final simplicity-based choice. In the final step, the
-        simplest model within the equivalence group is selected. Thus, delta does not directly
-        favor simple or complex models; it only determines how many models are allowed to
-        compete in the parsimony step. To be tuned via sensitivity analysis.
+        Equivalence tolerance on average CV-NLL: models within `delta` of the numeric best are treated as
+        statistically indistinguishable and become eligible for the parsimony tiebreak. Smaller values make the
+        equivalence rule stricter; the final choice is always the simplest model within the equivalence group.
+        Intended to be tuned via sensitivity analysis. Default: 0.466.
+    candidate_models : list[str], optional
+        Restrict cross-validation to this subset of distribution names (still subject to feasibility filtering).
+        If None, all four base models are considered.
 
     Returns
     -------
-    dict with keys:
-        avg_cv_nll : dict[str, float]
-            Mean CV negative log-likelihood per model across all finite fold scores.
-            Models with no finite scores receive float('inf').
-        std_cv_nll : dict[str, float]
-            Sample standard deviation (ddof=1) of fold-wise CV NLL per model.
-            float('nan') if fewer than 2 finite scores.
-        se_cv_nll : dict[str, float]
-            Standard error of the mean CV NLL per model (std / sqrt(n_finite_scores)).
-            float('nan') if fewer than 2 finite scores.
-        cv_numeric_winner : str | None
-            Model with the lowest avg_cv_nll among valid models. None if no valid models.
-        cv_equivalent_models : list[str]
-            All valid models within delta of the numeric winner's avg_cv_nll.
-        cv_parsimonious_winner : str | None
-            Simplest model in cv_equivalent_models. None if no valid models.
-        cv_has_valid_models : bool
-            True if at least one model produced a finite avg_cv_nll and CV ran successfully.
+    dict
+        Dictionary with keys:
+        - avg_cv_nll : dict[str, float], mean NLL per model across finite fold scores
+          (inf if no finite scores).
+        - std_cv_nll : dict[str, float], sample std-dev (ddof=1) of fold-wise NLL per model (nan if <2 finite scores).
+        - se_cv_nll : dict[str, float], standard error of the mean NLL per model (nan if <2 finite scores).
+        - cv_numeric_winner : str or None, model with lowest avg_cv_nll among valid models (None if none valid).
+        - cv_equivalent_models : list[str], valid models within `delta` of the numeric winner's avg_cv_nll.
+        - cv_parsimonious_winner : str or None, simplest model among `cv_equivalent_models` (None if none valid).
+        - cv_has_valid_models : bool, True if CV ran successfully and at least one model produced a finite average NLL.
+
+    Notes
+    -----
+    A commented-out alternative selection approach (Nadeau & Bengio corrected paired t-test with Bonferroni correction)
+    is retained in the code but currently unused in favor of the simpler delta-equivalence rule,
+    as it was found too complex/unstable for this use case.
     """
     failures = np.asarray(failures, dtype=float)
     censored = np.asarray(censored, dtype=float) if censored is not None and len(censored) > 0 else np.array([], dtype=float)
