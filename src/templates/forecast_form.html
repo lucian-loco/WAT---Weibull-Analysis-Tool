@@ -39,7 +39,6 @@
             margin-top: 8px;
         }
 
-        /* ── loading feedback ── */
         #loading {
             display: none;
             align-items: center;
@@ -69,8 +68,7 @@
 <body>
     <h2>Forecast of expected number of failures for: <code>{{ part }}</code></h2>
 
-    {# part is kept as URL parameter so it is available in the POST request #}
-    <form action="/forecast_form?part={{ part }}" method="post" id="forecast-form">
+    <form action="{{ url_for('route_forecast', part=part, edit=1) }}" method="post" id="forecast-form">
 
         <label for="fc">Forecast time(s) in days — separate multiple values with commas</label>
         <input type="text" id="fc" name="fc"
@@ -212,7 +210,6 @@
             fcDateInput.value = '';
         });
 
-        // Initial render in case the field is pre-filled by Jinja
         renderTags(fcInput.value);
 
         form.addEventListener('submit', function (e) {
@@ -229,4 +226,3 @@
     </script>
 </body>
 </html>
-

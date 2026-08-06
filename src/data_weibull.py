@@ -1,4 +1,34 @@
 #!/usr/bin/python3
+"""
+data_weibull.py
+================
+
+Data access and caching layer for Weibull reliability analysis.
+
+This module retrieves failure/suspension (censored) running-time data for assets/parts from the
+`weibull_data` database view (via `db_hitdata`), or alternatively from pre-exported local CSV snapshots.
+It normalizes and validates the retrieved records, applies configurable failure-count and distinct-failure-time
+thresholds (parts with too few or too homogeneous failures are excluded, since Weibull fitting is not
+statistically meaningful below these limits), and exposes the results as pandas DataFrames / dicts ready for
+downstream Weibull parameter estimation.
+
+A thread-safe, in-memory cache (`_weibull_cache`) can hold the full dataset to avoid repeated database round-trips.
+Caching is controlled via the `WEIBULL_CACHE_ENABLED` environment variable (enabled by default) and is
+refreshed on demand via `refresh_cache()`.
+
+Environment variables:
+    WEIBULL_CACHE_ENABLED : str, optional
+        'false'/'off'/'0'/'no' disables caching (direct DB access on every
+        call); any other value (or unset) keeps caching enabled.
+
+Module-level state:
+    _weibull_cache      : dict[str, pd.DataFrame] or None — cached data per part
+    _cache_timestamp     : datetime or None — timestamp of last successful refresh
+    _cache_lock          : threading.Lock — guards cache read/write
+    failure_threshold_global : int — default minimum failure count for inclusion
+
+Author: Lucian Groha
+"""
 from utils import DataError, ThresholdError, NoCacheError
 import pandas as pd
 import db_hitdata
@@ -72,6 +102,33 @@ def _normalize_weibull_df(df):
 
 
 def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=2):
+    """
+    Fetch Weibull data for every part that meets the given failure thresholds, directly from the database.
+
+    Only parts with at least `failure_threshold` failures and at least `distinct_threshold` distinct failure
+    running-times are included.
+
+    Parameters
+    ----------
+    failure_threshold : int, optional
+        Minimum number of failures required per part (default: module-level `failure_threshold_global`).
+    distinct_threshold : int, optional
+        Minimum number of distinct failure running-times required per part (default: 2).
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Mapping of part name to its normalized DataFrame of asset records
+        (columns per REQUIRED_COLUMNS).
+
+    Raises
+    ------
+    ThresholdError
+        If the thresholds are invalid (see `_validate_thresholds`).
+    DataError
+        If no parts satisfy the thresholds, or if required columns are
+        missing from the query result.
+    """
     # Only parts with failures more than the failure_threshold and the distinct_threshold will be considered
     _validate_thresholds(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
@@ -106,6 +163,37 @@ def get_all_data(failure_threshold=failure_threshold_global, distinct_threshold=
 
 
 def get_data(part):
+    """
+    Fetch and validate all Weibull records for a single part, directly from the database.
+
+    Parameters
+    ----------
+    part : str
+        Identifier of the part to retrieve (matched against the PART column).
+
+    Returns
+    -------
+    dict
+        {
+            'part'             : str, the requested part identifier,
+            'all_assets'       : pd.DataFrame, all normalized records for the part,
+            'installed_assets' : pd.DataFrame, records where CURRENT_STATE == 'I',
+            'failures'         : list of float, RUNNING_TIME for STATUS == 'F',
+            'suspensions'      : list of float, RUNNING_TIME for STATUS == 'S',
+            'IRP_dates'        : list of datetime, FAILURE_DATE for STATUS == 'F'
+        }
+
+    Raises
+    ------
+    DataError
+        If no data is found for the part, if there are fewer than 2 failures,
+        or fewer than 2 distinct failure running-times.
+
+    Warns
+    -----
+    UserWarning
+        If the part has fewer than 4 total failures (results may be unreliable).
+    """
     # Columns available in Weibull_data view: PART,ASSET_ID,RUNNING_TIME,STATUS,FAILURE_DATE,CURRENT_STATE
     # FAILURE_DATE has the format "yyyy-mm-dd hh:mm:ss" with 24 hours format
     with db_hitdata.get_cursor() as cursor:
@@ -146,6 +234,29 @@ def get_data(part):
 
 
 def get_parts(failure_threshold=failure_threshold_global, distinct_threshold=2):
+    """
+    Retrieve the list of part names that qualify for Weibull analysis based on the given thresholds,
+    directly from the database.
+
+    Parameters
+    ----------
+    failure_threshold : int, optional
+        Minimum number of failures required per part (default: module-level `failure_threshold_global`).
+    distinct_threshold : int, optional
+        Minimum number of distinct failure running-times required per part (default: 2).
+
+    Returns
+    -------
+    list[str]
+        Part names meeting the thresholds, ordered by ascending failure count.
+
+    Raises
+    ------
+    ThresholdError
+        If the thresholds are invalid (see `_validate_thresholds`).
+    DataError
+        If no parts satisfy the given thresholds.
+    """
     # Only parts with failures more than the failure_threshold will be considered
     _validate_thresholds(failure_threshold=failure_threshold, distinct_threshold=distinct_threshold)
 
@@ -173,37 +284,22 @@ def get_parts(failure_threshold=failure_threshold_global, distinct_threshold=2):
     return part_names
 
 
-# ToDo: Process the data further to capture failures and suspensions and current states of the new data as well
-# Get data for the Weibull Analysis out of local .csv files
-def get_csv_data(query='above 3'):
-    base_dir = r"C:\Users\lgroha\cernbox\Documents\Masterthesis\3_Data-Preparation\Weibull-Data_before-cleaning-Christine"
-
-    if query == 'above 3':
-        weibull_data = pd.read_csv(os.path.join(base_dir, 'Weibull_Data_parts-with-failures-above-3_2026-02-04.csv'))
-        print("Function returned data for parts with failures above 3.")
-
-    elif query == 'failures':
-        weibull_data = pd.read_csv(os.path.join(base_dir, 'Weibull_Data_parts-with-failures_2026-02-04.csv'))
-        print("Function returned data for parts with failures.")
-
-    elif query == 'all':
-        weibull_data = pd.read_csv(os.path.join(base_dir, 'Weibull_Data_2026-02-04.csv'))
-        print("Function returned every data for every part.")
-
-    else:
-        raise RuntimeError('Unknown query "{0}"'.format(query))
-
-    if weibull_data.shape[0] == 0:
-        raise DataError('The requested .csv file does not contain any data')
-
-    print("Number of assets found: {0}".format(weibull_data.shape[0]))
-
-    weibull_data = {name: group for name, group in weibull_data.groupby('PART')}
-
-    return weibull_data
-
-
 def refresh_cache():
+    """
+    Reload the full Weibull dataset from the database and atomically replace the module-level cache (`_weibull_cache`).
+
+    Updates `_cache_timestamp` to the current time (Europe/Zurich) on success.
+    Errors are logged rather than raised, so a failed refresh leaves the previous cache (if any) untouched.
+
+    Handles
+    -------
+    ThresholdError
+        Logged as an error; indicates invalid default thresholds.
+    DataError
+        Logged as a warning; indicates no qualifying data was found.
+    Exception
+        Any other unexpected error is logged as an error.
+    """
     global _weibull_cache, _cache_timestamp
     logger.info('Cache refresh for Weibull data started...')
     try:
@@ -245,6 +341,37 @@ def _get_cached_or_direct_data(part=None):
 
 
 def get_failures_and_suspensions(part=None, failure_threshold=failure_threshold_global):
+    """
+    Public entry point to retrieve failure/suspension running-times and asset details,
+    either for a single part or for all qualifying parts, using the cache when enabled.
+
+    Parameters
+    ----------
+    part : str or None, optional
+        Part identifier to retrieve data for. If None, data for all cached/qualifying parts is returned.
+    failure_threshold : int, optional
+        Used only in the error message if `part` is not found in the cached data
+        (default: module-level `failure_threshold_global`).
+
+    Returns
+    -------
+    dict
+        If `part` is None:
+            dict mapping each part name to a dict with keys 'failures', 'suspensions', 'IRP_dates', 'installed_assets',
+            'all_assets' (lists/list-of-dicts).
+        If `part` is given:
+            a single dict with the same keys as above, scoped to that part.
+        If caching is disabled and `part` is given, the raw result of get_data(part)` is returned directly
+        (bypasses the reshaping below, since `get_data` already returns the same structure).
+
+    Raises
+    ------
+    DataError
+        If `part` is specified but not present in the (cached) dataset, typically because it has
+        too few recorded failures.
+    NoCacheError
+        Propagated from `_get_cached_or_direct_data` if caching is enabled but no cache could be loaded.
+    """
     # This exception is needed since the return of data_weibull.get_parts() is already formatted correctly
     if not weibull_cache_enabled and part is not None:
         return _get_cached_or_direct_data(part=part)

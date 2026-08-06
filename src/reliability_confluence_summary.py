@@ -1,14 +1,35 @@
 #!/usr/bin/python3
 """
-Python script to update Confluence page with database query table + calculated values
+reliability_confluence_summary.py
+==================================
+
+Python script to update Confluence page with database query table + calculated values.
 
 This script:
-1. Queries your database for reliability metrics
-2. Calculates additional values in Python
-3. Creates a Confluence table
-4. Updates the Confluence page automatically
-"""
+1. Queries the reliability database (`reliability_part_metrics` joined with the hardware catalogue)
+   for per-part asset counts, failure counts, installation-time statistics, and MTBF.
+2. Enriches each row with expected-failure forecast values (point estimate, lower/upper confidence bounds)
+   for configured time horizons, sourced from the Weibull forecast cache (`weibull.get_forecast_cache`).
+3. Renders the combined result as an HTML table wrapped in a Confluence "html" macro (with inline CSS styling and an
+   auto-generation notice).
+4. Publishes (creates or updates) the resulting page on Confluence via the `confluence_api.Confluence` client.
 
+Intended to be run as a scheduled/CLI job after the Weibull data, analysis, and forecast caches have been refreshed
+(see the `__main__` block), so that `get_forecast_cache()` returns up-to-date results.
+
+Configuration (hard-coded within `reliability_summary_table`):
+    SPACE_KEY     : Confluence space key ("HWI").
+    ANCESTOR_ID   : Parent page ID under which the report page is nested.
+    PAGE_TITLE    : Title of the Confluence page to create/update.
+    FORECAST_DELTAS : Forecast horizons (in days) to display as extra columns (currently 1 year and 5 years).
+    SQL_QUERY     : The reliability metrics query executed against the database.
+
+Environment variables:
+    CONFLUENCE_TOKEN : str, required
+        Authentication token for the Confluence API client. The script raises a RuntimeError if this is not set.
+
+Author: Lucian Groha
+"""
 import os
 import io
 import html
@@ -27,16 +48,19 @@ logger = get_logger(__name__)
 
 def format_value_for_confluence(value: Any) -> str:
     """
-    Format a value for display in Confluence table.
+    Format a single value for safe display in an HTML table cell on Confluence.
 
-    - Converts None to "-" string
-    - Converts all values to strings (Python does this automatically in f-strings)
+    Parameters
+    ----------
+    value : Any
+        A value from the database query result or a calculated forecast field (e.g. int, float, str, None, or NaN).
 
-    Args:
-        value: Any value from database or calculation
-
-    Returns:
-        String formatted for Confluence HTML table
+    Returns
+    -------
+    str
+        "-" if the value is None or NaN; a one-decimal-place string for floats;
+        a plain string for ints; and the string representation for anything else. All string output is HTML-escaped via
+        `html.escape` to prevent malformed or unsafe markup in the Confluence page.
     """
     if value is None or pd.isna(value):
         return "-"
@@ -52,13 +76,23 @@ def format_value_for_confluence(value: Any) -> str:
 
 def make_html_table(f, rows):
     """
-    Create HTML table exactly like your colleague's wrenscan.py
+    Write an HTML table (header + body rows) representing tabular data to a file-like object,
+    for embedding in a Confluence page via the HTML macro.
 
-    Args:
-        f: File-like object to write to (e.g., io.StringIO())
-        rows: List of dictionaries with table data
+    Parameters
+    ----------
+    f : file-like object
+        Writable stream (e.g. `io.StringIO()`) that the HTML markup is written to.
+    rows : list[dict]
+        List of row dictionaries; the keys of the first row determine the table's column order and headers.
+        Each cell value is formatted via `format_value_for_confluence`.
+
+    Returns
+    -------
+    None
+        Writes directly to `f`. If `rows` is empty, writes a "No data available" placeholder paragraph
+        instead of a table.
     """
-
     if not rows:
         f.write("<p>No data available. Query to data base was not successful.</p>\n")
         return
@@ -81,6 +115,22 @@ def make_html_table(f, rows):
 
 
 def build_forecast_lookup(forecast_results):
+    """
+    Restructure the raw per-part forecast results into a nested lookup keyed by part name and forecast horizon (delta),
+    for fast row-by-row enrichment of the query DataFrame.
+
+    Parameters
+    ----------
+    forecast_results : dict
+        Mapping of part name to a forecast dict (as produced by `weibull_forecast.forecast_part_direct_delta`),
+        each containing a 'results' list of per-delta forecast entries (dicts with a 'delta' key among others).
+
+    Returns
+    -------
+    dict[str, dict[float, dict]]
+        Mapping: part name -> {delta (float): forecast entry dict}, where each forecast entry dict contains keys
+        like 'expected_failures', 'lower_bound', 'upper_bound' (see `weibull_forecast._expected_failures_direct_delta`).
+    """
     lookup = {}
     for part, forecast in forecast_results.items():
         rows = forecast.get("results", [])
@@ -94,6 +144,26 @@ def delta_label(d):
 
 
 def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
+    """
+    Add expected-failure forecast columns (upper bound, point estimate, lower bound) to the reliability metrics
+    DataFrame, for each requested forecast horizon, matched by equipment/part code.
+
+    Parameters
+    ----------
+    df_query : pandas.DataFrame
+        Reliability metrics query result; must contain an "EQUIPMENT CODE" column used to look up forecasts per part.
+    forecast_lookup : dict[str, dict[float, dict]]
+        Nested forecast lookup as produced by `build_forecast_lookup`.
+    deltas : list[float]
+        Forecast horizons (in days) to add columns for.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A copy of `df_query` with three new columns added per delta: "EXPECTED FAILURES +{label} UPPER", "... EXPECTED",
+        and "... LOWER" (label from `delta_label`). Rows for parts with no matching forecast, or deltas with no matching
+        forecast entry, are left as None in those columns.
+    """
     out = df_query.copy()
 
     # Create 3 columns per delta
@@ -131,7 +201,41 @@ def enrich_query_rows_with_forecast(df_query, forecast_lookup, deltas):
 
 def reliability_summary_table():
     """
-    Main function to fetch data, calculate values, and update Confluence page.
+    Main entry point: fetch reliability metrics from the database, enrich them with Weibull expected-failure forecasts,
+    render the combined result as an HTML table, and publish it to Confluence.
+
+    Workflow
+    --------
+    1. Reads the `CONFLUENCE_TOKEN` environment variable (raises if missing).
+    2. Executes the hard-coded `SQL_QUERY` against the reliability database via `db_hitdata.get_cursor()`.
+    3. If the query returns rows, retrieves the pre-computed forecast cache (`get_forecast_cache()`),
+       builds a per-part/per-delta lookup, and joins forecast columns (upper/expected/lower per configured horizon
+       in `FORECAST_DELTAS`) onto the query result via `enrich_query_rows_with_forecast`.
+    4. Reorders columns into a fixed display order: identification and count columns first, forecast columns
+       in the middle, then age/installation-time/MTBF columns last.
+    5. Renders the final table as HTML (via `make_html_table`), wrapped in a Confluence HTML macro with inline CSS
+       styling and an auto-generation notice with the current timestamp.
+    6. Publishes the page via `Confluence.insert_or_update_page`, creating or updating the page identified
+       by `SPACE_KEY`, `ANCESTOR_ID`, and `PAGE_TITLE`.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+        The Confluence page is updated as a side effect; nothing is returned.
+
+    Raises
+    ------
+    RuntimeError
+        If the `CONFLUENCE_TOKEN` environment variable is not set.
+
+    Notes
+    -----
+    If the SQL query returns no rows, the page is still published with an empty-data placeholder table,
+    and a warning is logged.
     """
     confluence_token = os.environ.get("CONFLUENCE_TOKEN")
     if not confluence_token:
