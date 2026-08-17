@@ -8,11 +8,13 @@
 
   <body>
     <div style="margin-left:1em;">
-      <h1><img src="/static/images/favicon.ico" />HIT Data</h1>
+      <h1><img src="/static/images/favicon.ico" />Weibull Analysis Tool</h1>
       <ul>
-        <li><a href="/weibull?part=HCCTRP">Weibull example</a></li>
+          <li><a href="/weibull?part=HCCTRP&plot_type=CDF">Weibull example CDF</a></li>
+          <li><a href="/weibull?part=HCCTRP&plot_type=SF">Weibull example SF</a></li>
+          <li><a href="/forecast?part=HCCTRP&plot_type=CDF">Forecast example</a></li>
       </ul>
-      <a href="https://gitlab.cern.ch/hit/hit-data">Source code</a> | <a href="mailto:hit.data@cern.ch">Support</a>
+      <a href="mailto:hit.data@cern.ch">Support</a>
       <div style="color:lightgray; font-size:0.8em;">
         commit {{ commit_hash }} build date {{ build_date }}
       </div>
