@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This repository contains Python scripts for Weibull reliability analysis, served through a Flask web server. It fetches failure and suspension (censored) running-time data for equipment parts from an Oracle database, fits Weibull (and related) distributions, selects the best model per part, and exposes probability plots and failure forecasts through simple HTTP endpoints.
+This repository contains Python scripts for Weibull reliability analysis, served through a Flask web server. It fetches failure and suspension (censored) running-time data for equipment parts from an Oracle database, fits Weibull models, selects the best model per part, and exposes probability plots and failure forecasts through simple HTTP endpoints.
 
 A `Dockerfile` is included to run the server inside a container, and the resulting container images are stored in the registry associated with this repository.
 
@@ -15,9 +15,9 @@ Scripts whose file names start with an **uppercase** letter (e.g. `DeltaCV_Tunin
 ## How it works
 
 1. **Data access** (`db_hitdata.py`, `data_weibull.py`) — connects to the Oracle database (`weibull_data` view) and retrieves failure/suspension running times per part. Parts need a minimum number of failures and distinct failure times to qualify for analysis. Results are cached in memory to avoid hitting the database on every request.
-2. **Model fitting and selection** (`weibull.py`, `weibull_evaluation.py`) — fits candidate Weibull-family models per part and selects the best one using cross-validation (CV, default), BIC, or AICc.
-3. **Confidence bounds** (`weibull_ci.py`) — computes confidence intervals for the fitted parameters/curves (analytical, bootstrap, or parametric Monte Carlo methods).
-4. **Forecasting** (`weibull_forecast.py`) — projects the expected number of future failures over configurable time horizons, with confidence bounds.
+2. **Model fitting and selection** (`weibull.py`, `weibull_evaluation.py`) — fits candidate Weibull models per part and selects the best one using cross-validation (CV, default), BIC (falback), or AICc.
+3. **Confidence bounds** (`weibull_ci.py`) — computes confidence intervals for the fitted parameters/curves (analytical Fisher-Matrix method as default, additional available: bootstrap and parametric Monte Carlo method).
+4. **Forecasting** (`weibull_forecast.py`) — projects the expected number of failures over configurable time horizons, with confidence bounds.
 5. **Web server** (`main.py`) — a Flask app that ties everything together, serves plots and forecasts on demand, and refreshes all caches automatically once a day.
 6. **Reporting** (`reliability_confluence_summary.py`, `confluence_api.py`) — optionally publishes a summary reliability table to a Confluence page.
 
@@ -63,7 +63,7 @@ http://localhost:8888/weibull?part=HCCTRI&plot_type=SF&edit=1
 
 ### `/forecast`
 
-Computes the expected number of future failures (with confidence bounds) for a given part, over one or more future time horizons.
+Computes the expected number of failures (with confidence bounds) for a given part, over one or more future time horizons.
 
 **Method:** `GET`, `POST`
 
@@ -146,4 +146,4 @@ The resulting container image is published to the container registry associated 
 
 ## Notes on the thesis-only scripts
 
-The uppercase-named scripts (`DeltaCV_Tuning.py`, `Predictive_Accuracy.py`, `Synthetic_Data.py`, `Validate_Weibull_CI.py`) are standalone analysis scripts developed as part of the underlying master's thesis. They are not imported by `main.py` and are not required to run the web tool. They are kept here for transparency and reproducibility of the statistical methodology (e.g. tuning the CV delta parameter, evaluating predictive accuracy, generating synthetic datasets for validation, and validating confidence-interval coverage), and can be run independently if you want to reproduce or extend that analysis.
+The uppercase-named scripts (`DeltaCV_Tuning.py`, `Predictive_Accuracy.py`, `Synthetic_Data.py`, `Validate_Weibull_CI.py`) are standalone analysis scripts developed as part of the underlying master's thesis with the title "Development of a Universally Applicable Tool for Robust Weibull Analysis of Field Systems -- Applied to CERN's Front-End Computers" by Lucian Groha. They are not imported by `main.py` and are not required to run the web tool. They are kept here for transparency and reproducibility of the statistical methodology (e.g. tuning the CV delta parameter, evaluating predictive accuracy, generating synthetic datasets for validation, and validating confidence-interval coverage), and can be run independently if you want to reproduce or extend that analysis.
