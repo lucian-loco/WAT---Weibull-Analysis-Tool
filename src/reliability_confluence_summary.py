@@ -38,11 +38,14 @@ import pandas as pd
 from typing import Any
 from textwrap import dedent
 from datetime import datetime
+from urllib.parse import quote
 from confluence_api import Confluence
 from weibull import get_forecast_cache
 from utils import get_logger
 
 logger = get_logger(__name__)
+
+DASHBOARD_URL_TEMPLATE = ("https://confluence.cern.ch/spaces/HWI/pages/753809310/HIT+Reliability+Dashboard?pageId=753809310&run_1_part_code={code}&run_1=run")
 
 
 
@@ -74,6 +77,13 @@ def format_value_for_confluence(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
 
+def make_equipment_code_link(part_code: str) -> str:
+    url = DASHBOARD_URL_TEMPLATE.format(code=quote(str(part_code)))
+    label = html.escape(str(part_code), quote=True)
+
+    return f'<a href="{html.escape(url, quote=True)}">{label}</a>'
+
+
 def make_html_table(f, rows):
     """
     Write an HTML table (header + body rows) representing tabular data to a file-like object,
@@ -97,6 +107,8 @@ def make_html_table(f, rows):
         f.write("<p>No data available. Query to data base was not successful.</p>\n")
         return
 
+    link_column = 'EQUIPMENT CODE'
+
     columns = list(rows[0].keys())
 
     f.write("<table><thead>\n<tr>")
@@ -107,7 +119,11 @@ def make_html_table(f, rows):
     for row in rows:
         f.write("<tr>")
         for col in columns:
-            cell = format_value_for_confluence(row.get(col))
+            raw_value = row.get(col)
+            if col == link_column and raw_value is not None and not pd.isna(raw_value):
+                cell = make_equipment_code_link(raw_value)
+            else:
+                cell = format_value_for_confluence(raw_value)
             f.write(f"<td>{cell}</td>")
         f.write("</tr>\n")
 
